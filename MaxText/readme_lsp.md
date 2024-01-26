@@ -1,4 +1,4 @@
-## 创建
+## 创建 2 x v4-8 multi slice
 export TPU_PREFIX=llm-jax-v4-8-multi
 export QR_ID=$TPU_PREFIX
 export NODE_COUNT=2
@@ -25,11 +25,8 @@ RUN_NAME='multislice-test'
 python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME
 
 
-pip install -f https://storage.googleapis.com/jax-releases/libtpu_releases.html jax[tpu]==0.4.10
 
-
-
-## v4-16 pod train
+## v4-16 pod train single slice
 ## clone resposity
 export TPU_PREFIX=llm-jax-v4-16-10
 export QR_ID=$TPU_PREFIX
@@ -38,5 +35,4 @@ RUN_NAME='gs://llm_base_models/lsp_test/singleslice'
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="git clone https://github.com/Lisennlp/MaxText.git"
 ## 安装
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="/home/lishengping/miniconda3/bin/pip install -r MaxText/requirements_lsp.txt"
-
-gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="/home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/test.yml run_name=$RUN_NAME" --ZONE $ZONE
+gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME"

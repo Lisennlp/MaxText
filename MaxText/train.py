@@ -324,7 +324,7 @@ def train_loop(config, state=None):
       state, metrics = p_train_step(
           state, example_batch, nextrng
       )
-
+    max_logging.log(f'metrics: {metrics}')
     example_batch = load_next_batch(data_iterator, example_batch, config)
     nextrng = jax.random.fold_in(init_rng, step+1)
     new_time = datetime.datetime.now()
