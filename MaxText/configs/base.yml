@@ -65,7 +65,7 @@ base_emb_dim: 2560
 base_num_query_heads: 8
 base_num_kv_heads: 8
 base_mlp_dim: 8192
-base_num_decoder_layers: 16
+base_num_decoder_layers: 32
 head_dim: 256
 # activation functions are .
 mlp_activations: ["relu"]
