@@ -1,7 +1,8 @@
 absl-py
-aqtp
+aqtp==0.4
 cloud-tpu-diagnostics
 tensorboardx
 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 jax[tpu]==0.4.23
 orbax-checkpoint==0.5.1
+flax==0.8.1
