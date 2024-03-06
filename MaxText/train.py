@@ -316,10 +316,11 @@ def setup_mesh_and_model(config):
   # Mesh definition
   devices_array = max_utils.create_device_mesh(config)
   mesh = Mesh(devices_array, config.mesh_axes)
+  print(f'config: {config}')
 
   # Model and Optimizer definition
   quant = quantizations.configure_quantization(config)
-  logging.info(f'quant: {quant}')
+  print(f'quant: {quant}')
   
   model = Transformer(config, mesh, quant=quant)
   learning_rate_schedule = max_utils.create_learning_rate_schedule(config)

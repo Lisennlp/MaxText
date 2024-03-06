@@ -57,7 +57,7 @@ save_config_to_gcs: False
 
 # Activation dtypes.
 dtype: "bfloat16"
-quantization: ""
+quantization: "int8"
 # Shard the range finding operation for quantization. By default this is set to number of slices.
 quantization_local_shard_count: -1
 
@@ -71,7 +71,7 @@ base_emb_dim: 4096
 base_num_query_heads: 32
 base_num_kv_heads: 32
 base_mlp_dim: 11008
-base_num_decoder_layers: 16
+base_num_decoder_layers: 32
 head_dim: 128
 # mixture of experts (moe)
 num_experts: 1
@@ -86,7 +86,7 @@ logits_dot_in_fp32: True  # whether to use fp32 in logits_dense or shared_embedd
 remat_policy: 'full'
 scan_layers: True
 param_scan_axis: 1
-attention: 'flash' # Supported attention: dot_product, flash, cudnn_flash_te
+attention: 'dot_product' # Supported attention: dot_product, flash, cudnn_flash_te
 # Combine matmuls for QKV and MLP
 fused_qkv: False
 fused_mlp: False
@@ -157,7 +157,7 @@ tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
 eval_split: 'validation'
-per_device_batch_size: 12.0
+per_device_batch_size: 1.0
 eval_per_device_batch_size: 0
 max_corpus_chars: 10_000_000
 dataset_type: c4 # must be c4 or synthetic

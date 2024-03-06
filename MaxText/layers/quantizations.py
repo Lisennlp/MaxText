@@ -15,13 +15,17 @@
 """Quantization library."""
 
 import functools
+from typing import Any, Sequence
 
 from aqt.jax.v2 import config as aqt_config
 from aqt.jax.v2.flax import aqt_flax
-from common_types import Config
 from dataclasses import dataclass
 import jax.numpy as jnp
 
+
+
+
+Config = Any
 
 # class QuantMode(enum.Enum):
 #   TRAIN = 1

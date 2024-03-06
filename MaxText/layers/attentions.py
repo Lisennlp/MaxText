@@ -657,7 +657,7 @@ class AttentionOp(nn.Module):
       attn_out += local_normalizer * local_out
     return attn_out
 
-
+  # lsp: atten call
   @nn.compact
   def __call__(self, query, key, value, decoder_segment_ids, model_mode):
     prefill_kv_cache, ar_kv_cache = self.kv_cache(key, value, decoder_segment_ids, model_mode)
