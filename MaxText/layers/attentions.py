@@ -197,6 +197,8 @@ class AttentionOp(nn.Module):
     segment_axis_names = nn.logical_to_mesh_axes(
         (BATCH, 'activation_length_no_heads')
     )
+    print(f'axis_names: {axis_names}')
+    print(f'segment_axis_names: {segment_axis_names}')
 
     @functools.partial(
         shard_map,
@@ -660,6 +662,7 @@ class AttentionOp(nn.Module):
   # lsp: atten call
   @nn.compact
   def __call__(self, query, key, value, decoder_segment_ids, model_mode):
+    # lsp:训练的时候直接返回qkv ： (key, value, decoder_segment_ids), None
     prefill_kv_cache, ar_kv_cache = self.kv_cache(key, value, decoder_segment_ids, model_mode)
 
     prefill_unnormalized_output, prefill_exponentials_max, prefill_exponentials_sum = self.apply_attention(

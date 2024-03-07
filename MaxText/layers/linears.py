@@ -200,6 +200,7 @@ class MlpBlock(nn.Module):
     # Iterate over specified MLP input activation functions.
     # e.g. ('relu',) or ('gelu', 'linear') for gated-gelu.
     activations = []
+    # False
     if cfg.fused_mlp:
       x = DenseGeneral(
             (len(self.activations), self.intermediate_dim),

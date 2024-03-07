@@ -374,6 +374,13 @@ def train_loop(config, state=None):
     model,
     config
   )
+  print(f'config: {config}')
+  print(f'state_mesh_annotations: {state_mesh_annotations}')
+  print(f'in_shard_train: {in_shard_train}')
+  print(f'out_shard_train: {out_shard_train}')
+  print(f'static_argnums_train: {static_argnums_train}')
+  print(f'donate_argnums_train: {donate_argnums_train}')
+  print(f'functional_train: {functional_train}')
 
   if eval_data_iterator:
     # pylint: disable=line-too-long

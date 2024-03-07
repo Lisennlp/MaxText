@@ -31,7 +31,7 @@ python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME
 export TPU_PREFIX=llm-jax-v4-16-10
 export QR_ID=$TPU_PREFIX
 export ZONE=us-central2-b
-RUN_NAME='gs://llm_base_models/lsp_test/maxtext0301'
+RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext0307'
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="git clone https://github.com/Lisennlp/MaxText.git"
 ## 安装
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="bash setup.sh;/home/lishengping/miniconda3/bin/pip install -r MaxText/requirements_lsp.txt"
