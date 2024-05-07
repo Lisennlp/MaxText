@@ -22,7 +22,7 @@ from flax import linen as nn
 from jax.sharding import Mesh
 import jax.numpy as jnp
 # from jax.experimental.pallas.ops.tpu import flash_attention
-from layers import attentions
+from layers import dc_attention
 from layers import embeddings
 from layers import linears
 from layers import normalizations
@@ -39,7 +39,7 @@ Mesh = common_types.Mesh
 ScanIn = common_types.ScanIn
 
 Embed = embeddings.Embed
-Attention = attentions.Attention
+Attention = dc_attention.Attention
 RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
 
@@ -48,7 +48,7 @@ Quant = quantizations.AqtQuantization
 #-----------------------------------------
 
 
-class LlamaDecoderLayer(nn.Module):
+class DcformerDecoderLayer(nn.Module):
   """Transformer decoder layer that attends to the encoder."""
   config: models.Config
   mesh: Mesh
@@ -96,7 +96,7 @@ class LlamaDecoderLayer(nn.Module):
       float32_qk_product = True,  # computes logits in float32 for stability.
       float32_logits = True,
       quant=self.quant)
-    # Attention residual
+
     attention_lnx = attention_layer(
             lnx,
             lnx,

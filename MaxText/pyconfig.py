@@ -91,7 +91,8 @@ class _HyperParameters():
   # pylint: disable=missing-class-docstring
   def _validate_env_variables(self, raw_data_from_yaml):
     for environment_var in os.environ:
-      if environment_var[:len(_MAX_PREFIX)] == _MAX_PREFIX:
+      print(f'environment_var: {environment_var}')
+      if environment_var[:len(_MAX_PREFIX)] == _MAX_PREFIX: # 找M_开头的环境变量干啥？
         proposed_key = environment_var[len(_MAX_PREFIX):].lower()
         if proposed_key not in raw_data_from_yaml:
           raise ValueError(f"We received env `{environment_var}` but it doesn't match a key, so it is assumed a mistake.")
@@ -106,10 +107,12 @@ class _HyperParameters():
   def _update_from_env_and_command_line(self, raw_keys, raw_data_from_yaml, argv, **kwargs) -> list[str]:
     ''' Update model config from environment and command line
     '''
+    # 获取命令行传递的参数, dict
     raw_data_from_cmd_line = self._load_kwargs(argv, **kwargs)
     updated_keys = []
 
-    for k in raw_data_from_cmd_line:
+    for k in raw_data_from_cmd_line: 
+      # 命令行参数必须在base.yml中
       if k not in raw_data_from_yaml:
         raise ValueError(
             f"Key {k} was passed at the command line but isn't in config."
@@ -117,13 +120,16 @@ class _HyperParameters():
 
     for k in raw_data_from_yaml:
       if k in raw_data_from_cmd_line and yaml_key_to_env_key(k) in os.environ:
+        # base.yml文件不允许传递环境变量的参数
         raise ValueError(
             f"You are passing overrides by both CLI and ENV for `{k}`. This isn't allowed.")
 
       if not k in raw_data_from_cmd_line and not yaml_key_to_env_key(k) in os.environ:
+        # 如果yml文件参数不在命令行参数。且不在环境变量参数，先存储起来。
         raw_keys[k] = raw_data_from_yaml[k]
         continue
-
+      # 命令行或者环境变量参数存在updated_keys中，之后将命令行参数或者环境变量参数覆盖base.yml中的参数
+      # 其实就是说，命令行和环境变量的参数优先级高于yml文件
       updated_keys.append(k)
       if k in raw_data_from_cmd_line:
         new_proposal = raw_data_from_cmd_line[k]
@@ -151,19 +157,23 @@ class _HyperParameters():
     return updated_keys
 
   def __init__(self, argv: list[str], **kwargs):
+    # 读取base.yml config文件
     with open(argv[1], "r", encoding="utf-8") as yaml_file:
       raw_data_from_yaml = yaml.safe_load(yaml_file)
     self._validate_env_variables(raw_data_from_yaml)
 
     raw_keys = OrderedDict()
+    # 更新命令和环境变量参数到raw_keys中
     keys_from_env_and_command_line = self._update_from_env_and_command_line(raw_keys, raw_data_from_yaml, argv, **kwargs)
     max_logging.log(
         f"Updating keys from env and command line: {keys_from_env_and_command_line}")
+    # 基于base.yml文件中的模型名字，读取相应的模型config文件，然后更新到raw_keys中
     keys_from_model = _HyperParameters.update_model_vars(argv[1], raw_keys)
     max_logging.log(f"Updating keys from model: {keys_from_model}")
     validate_no_keys_overwritten_twice(keys_from_env_and_command_line, keys_from_model)
 
     # We initialize the jax distributed system here because it must be done before device backend is initialized.
+    # 根据不同的硬件进行初始化
     max_utils.maybe_initialize_jax_distributed_system(raw_keys)
 
     if raw_keys['model_name'] == "gpt3-175b":
@@ -181,7 +191,7 @@ class _HyperParameters():
     '''Transformations between the config data and configs used at runtime'''
     if raw_keys["run_name"] == "":
       raw_keys["run_name"] = os.environ.get("JOBSET_NAME") #using XPK default
-    run_name = raw_keys["run_name"]
+    run_name = raw_keys["run_name"] # 基本上在run_name上传入完整路径也可以
     base_output_directory = raw_keys["base_output_directory"]
     if run_name:
       raw_keys["tensorboard_dir"] = os.path.join(base_output_directory, run_name, "tensorboard", "")
@@ -346,6 +356,7 @@ class HyperParameters(): # pylint: disable=missing-class-docstring
 def initialize(argv, **kwargs):
   global _config, config
   _config = _HyperParameters(argv, **kwargs)
+  # 将_config传给config
   config = HyperParameters()
 
 if __name__ == "__main__":

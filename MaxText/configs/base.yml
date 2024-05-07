@@ -95,6 +95,7 @@ record_internal_nn_metrics: 0
 
 # Output directory
 # Create a GCS bucket, e.g. my-maxtext-outputs and set this to "gs://my-maxtext-outputs/"
+# 一些模型训练信息的输出目录
 base_output_directory: ""
 
 # Jax cache directory
@@ -151,8 +152,8 @@ num_slices: -1
 
 # Dataset
 # Replace with your path given as argument in download_dataset.sh, e.g. "gs://my-maxtext-dataset/"
-dataset_path: "gs://common_datasets/" # lsp
-vocab_size: 32_000 # powers of 2 for sharding
+dataset_path: "gs://common_datasets_us-east5/" # lsp
+vocab_size: 50256 # powers of 2 for sharding
 tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
@@ -175,7 +176,7 @@ log_period: 100 # Flushes Tensorboard
 # 2) Cosine decay from [learning_rate] to [learning_rate * cosine_learning_rate_final_fraction] from warmup to learning_rate_schedule_steps
 # 3) Constant learning rate of 0 from learning_rate_schedule_steps to steps.
 # The zero learning rate section can be used to more accurately measure the fully trained model's performance.
-learning_rate: 3.e-5
+learning_rate: 2.e-4
 cosine_learning_rate_final_fraction: 0.1
 warmup_steps_fraction: 0.1
 learning_rate_schedule_steps: -1 # By default the length of the schedule is set to the number of steps.

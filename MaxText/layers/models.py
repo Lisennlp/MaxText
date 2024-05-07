@@ -169,6 +169,9 @@ class Decoder(nn.Module):
     elif self.config.decoder_block == "gpt3":
       from layers import gpt3
       return gpt3.Gpt3DecoderLayer
+    elif self.config.decoder_block == "dcformer":
+      from layers import dcformer
+      return dcformer.DcformerDecoderLayer
     else:
       raise ValueError(f"Incorrect decoder_block name {self.config.decoder_block=}")
 
@@ -230,8 +233,8 @@ class Decoder(nn.Module):
         policy = None
       BlockLayer = nn.remat(  # pylint: disable=invalid-name
           BlockLayer,
-          prevent_cse=not cfg.scan_layers,
-          policy=policy,
+          prevent_cse=not cfg.scan_layers, # scan_layers: True
+          policy=policy, 
           static_argnums=(-1, -2, -3, -4, -5),
       )
     if cfg.scan_layers:
@@ -289,6 +292,7 @@ class Decoder(nn.Module):
     )
 
     # [batch, length, emb_dim] -> [batch, length, vocab_size]
+    #lsp:  False
     if cfg.logits_via_embedding:
       # Use the transpose of embedding matrix for logit transform.
       logits = self.shared_embedding.attend(y)
@@ -299,10 +303,10 @@ class Decoder(nn.Module):
       logits = linears.DenseGeneral(
           cfg.vocab_size,
           dtype=jnp.float32 if cfg.logits_dot_in_fp32 else cfg.dtype,  # for logit training stability
-          kernel_axes=('embed', 'vocab'),
+          kernel_axes=('embed', 'vocab'), # fsdp mp
           name='logits_dense')(y) # We do not quantize the logits matmul.
     logits = nn.with_logical_constraint(
-        logits, ('activation_batch', 'activation_length', 'activation_vocab'))
+        logits, ('activation_batch', 'activation_length', 'activation_vocab'))  # fsdp, 1, 1
     return logits
 
 

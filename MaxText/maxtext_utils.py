@@ -35,6 +35,7 @@ def get_functional_train_with_signature(train_step, mesh, state_mesh_annotations
   data_pspec = P(*config.data_sharding)
   state_mesh_shardings = jax.tree_map(
       lambda p: jax.sharding.NamedSharding(mesh, p), state_mesh_annotations)
+# data_sharding: [['data', 'fsdp', 'fsdp_transpose', 'sequence', 'tensor', 'autoregressive']]
   data_sharding = jax.tree_map(
       lambda p: jax.sharding.NamedSharding(mesh, p), data_pspec)
   in_shardings = (state_mesh_shardings, data_sharding, None) # State, batch, rng

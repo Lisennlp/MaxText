@@ -541,13 +541,17 @@ cross_entropy_with_logits.defvjp(_cross_entropy_with_logits_fwd,
 def get_abstract_state(model, tx, config, rng, mesh, is_training=True):
   """ Get a shaped abstraction of the state (including optimizer)"""
   init_state_partial = functools.partial(init_initial_state, model, tx, config, is_training)
-
+  # 获取每个参数的shape dtype
   abstract_state = jax.eval_shape(init_state_partial, rng)
-
+  # jax.sharding.PartitionSpec
   state_logical_annotations = nn.get_partition_spec(abstract_state)
-
+  
   state_mesh_shardings = nn.logical_to_mesh_sharding(state_logical_annotations, mesh,
                                                      config.logical_axis_rules)
+
+  print(f'abstract_state: {abstract_state}')
+  print(f'state_logical_annotations: {state_logical_annotations}')
+  print(f'state_mesh_shardings: {state_mesh_shardings}')
 
   abstract_sharded_state = jax.jit(
       init_state_partial,

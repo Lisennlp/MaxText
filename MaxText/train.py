@@ -62,6 +62,11 @@ from absl import logging
 Transformer = models.Transformer
 EPS = 1e-8
 
+
+
+# mesh = Mesh(device_ids=array([[[[[[0]]]], [[[[1]]]], [[[[2]]]], [[[[3]]]], [[[[6]]]],[[[[7]]]],
+# [[[[4]]]],[[[[5]]]]]]), axis_names=('data', 'fsdp', 'fsdp_transpose', 'sequence', 'tensor', 'autoregressive'))
+# (1, -1, 1, 1, 1 ,1)
 def validate_train_config(config):
   """ Validates the configuration is set correctly for train.py"""
 
@@ -500,6 +505,7 @@ def main(argv: Sequence[str]) -> None:
   else:
     cc.set_cache_dir(os.path.expanduser(config.jax_cache_dir))
   os.environ["TFDS_DATA_DIR"] = config.dataset_path
+  
   debug_config = debug_configuration.DebugConfig(
     stack_trace_config = stack_trace_configuration.StackTraceConfig(
       collect_stack_trace = config.collect_stack_trace,

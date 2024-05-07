@@ -221,7 +221,7 @@ class MlpBlock(nn.Module):
             self.intermediate_dim,
             dtype=self.dtype,
             kernel_init=self.kernel_init,
-            kernel_axes=('embed', 'mlp'),
+            kernel_axes=('embed', 'mlp'), # fsdp, mp
             name=dense_name,
             quant=self.quant,
             use_bias=self.use_bias,
@@ -242,7 +242,7 @@ class MlpBlock(nn.Module):
         inputs.shape[-1],
         dtype=self.dtype,
         kernel_init=self.kernel_init,
-        kernel_axes=('mlp', 'embed'),
+        kernel_axes=('mlp', 'embed'), # mp, fsdp
         name='wo',
         quant=self.quant,
         use_bias=self.use_bias,
