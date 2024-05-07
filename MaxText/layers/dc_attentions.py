@@ -21,7 +21,6 @@ from typing import Optional, Sequence, Any
 from einops import rearrange, repeat
 from flax import linen as nn
 from flax.linen.linear import PrecisionLike
-from flax.linen import initializers
 
 import jax
 from jax import lax
@@ -55,6 +54,7 @@ DenseGeneral = linears.DenseGeneral
 RotaryEmbedding = embeddings.RotaryEmbedding
 NdInitializer = initializers.NdInitializer
 Quant = quantizations.AqtQuantization
+NormalInitializer = initializers.normal
 
 AxisNames = common_types.AxisNames
 BATCH = common_types.BATCH
@@ -110,7 +110,7 @@ class DynamicWeightProjection(nn.Module):
   precision: PrecisionLike = None
   n_splits: int = None
   num_heads: int = 0
-  num_groups: int = 0
+  num_groups: int = 1
   input_dim: int = None
   dynamic_w_init: float = None
   dynamic_d_init: float = None
@@ -129,16 +129,19 @@ class DynamicWeightProjection(nn.Module):
     self.num_heads_per_group = self.num_heads // self.num_groups
     kwargs = dict(
       dtype=self.dtype,
-      param_dtype=self.param_dtype,
+      # param_dtype=self.param_dtype,
       use_bias=False,
-      precision=self.precision,
+      # precision=self.precision,
     )
+
     if self.dynamic_w_init is not None:
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),
-        kernel_init=initializers.normal(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), **kwargs)
+        # kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
+        kernel_axes=('embed', None, 'heads', 'mlp'),
+        **kwargs)
       self.dw_hidden_activation = nn.gelu
 
       G, K, M = self.num_groups, self.dynamic_w_hidden_dim, self.num_heads_per_group
@@ -146,12 +149,14 @@ class DynamicWeightProjection(nn.Module):
       # if not self.decompose_dynamic_w: I = M
       shape = [G, self.n_splits, K, I, M]
       # self.qkw = DenseGeneral(axis=(-3, -2, -1), features=shape[3:],
-      #   kernel_init=initializers.normal(self.dynamic_w_init), **kwargs)
-      self.qkw = self.param('qkw', initializers.normal(self.dynamic_w_init), shape, self.param_dtype)
+      #   kernel_init=NormalInitializer(self.dynamic_w_init), **kwargs)
+      self.qkw = self.param('qkw', NormalInitializer(self.dynamic_w_init), shape, self.param_dtype)
   
     if self.dynamic_d_init is not None:
       self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits),
-        kernel_init=initializers.normal(self.dynamic_d_init), **kwargs)
+        # kernel_init=NormalInitializer(self.dynamic_d_init),
+         **kwargs
+        )
 
     self.dw_activation = nn.tanh
     self.dw1_norm = nn.RMSNorm(use_scale=False, **{k: v for k, v in kwargs.items() if k not in ['use_bias', 'precision']})
@@ -222,12 +227,13 @@ class CrossHeadProjection(nn.Module):
       precision=self.precision,
     )
     # self.w = DenseGeneral(axis=(1, 2), features=(self.num_heads_per_group,),  # BGMTS,GMN->BGNTS
-    #   kernel_init=initializers.normal(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), **kwargs)
+    #   kernel_init=NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), **kwargs)
     shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
-    self.w = self.param('w', initializers.normal(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
+    self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
 
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
     shape = inputs.shape
+    print(f'inputs.shape: {inputs.shape} self.num_heads: {self.num_heads}')
     assert inputs.shape[1] == self.num_heads
     inputs = rearrange(inputs, 'B (G M) T S -> B G M T S', G=self.num_groups)
     inputs_label = 'BGMTS'
@@ -293,22 +299,23 @@ class AttentionOp(nn.Module):
   precision: PrecisionLike = None
   num_groups: int = 1
   param_dtype: Any = jnp.float32
-
+  head_dim: int = 128
+  deterministic: bool = False
 
   # kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.lecun_normal()
   # bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
   def setup(self):
     if self.dynamic_compose:
-      input_dim = self.num_heads * self.head_dim
+      input_dim = self.num_query_heads * self.head_dim
       I = 2
       num_heads_per_group = self.num_query_heads // self.num_groups
       dynamic_w_hidden_dim = num_heads_per_group * I * 2
       if self.is_cross_attention:
         for name in ['q_dyn_w_proj', 'k_dyn_w_proj']:
           setattr(self, name, DynamicWeightProjection(
-            num_heads=self.num_heads, num_groups=self.num_groups,
-            input_dim=self.num_heads * self.head_dim, n_splits=2,
+            num_heads=self.num_query_heads, num_groups=self.num_groups,
+            input_dim=self.num_query_heads * self.head_dim, n_splits=2,
             dynamic_w_init=math.sqrt(1 / dynamic_w_hidden_dim) * 2 / (num_heads_per_group + I) * 0.01,
             dynamic_d_init=math.sqrt(2 / (input_dim + num_heads_per_group)) * 0.005,
             dynamic_squeeze_ratio=num_heads_per_group // I,
@@ -319,8 +326,8 @@ class AttentionOp(nn.Module):
           ))
       else:
         self.dyn_w_proj = DynamicWeightProjection(
-          num_heads=self.num_heads, num_groups=self.num_groups,
-          input_dim=self.num_heads * self.head_dim, n_splits=4,
+          num_heads=self.num_query_heads, num_groups=self.num_groups,
+          input_dim=self.num_query_heads * self.head_dim, n_splits=4,
           dynamic_w_init=math.sqrt(1 / dynamic_w_hidden_dim) * 2 / (num_heads_per_group + I) * 0.01,
           dynamic_d_init=math.sqrt(2 / (input_dim + num_heads_per_group)) * 0.005,
           dynamic_squeeze_ratio=num_heads_per_group // I,
@@ -331,7 +338,7 @@ class AttentionOp(nn.Module):
         )
       for name in ['pre_proj', 'post_proj']:
         setattr(self, name, CrossHeadProjection(
-          num_heads=self.num_heads, num_groups=self.num_groups,
+          num_heads=self.num_query_heads, num_groups=self.num_groups,
           dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
         ))
 
@@ -359,6 +366,7 @@ class AttentionOp(nn.Module):
       decoder_segment_ids: Array | None,
       model_mode: str
   ) -> Array | None:
+    # mask: is loss mask
     mask = None
     if model_mode == common_types.MODEL_MODE_AUTOREGRESSIVE:
       mask = decoder_segment_ids[:, None, None, None, :] == common_types.DECODING_ACTIVE_SEQUENCE_INDICATOR
@@ -366,7 +374,7 @@ class AttentionOp(nn.Module):
       mask = decoder_segment_ids[:, :, None] == decoder_segment_ids[:, None, :]
       mask = mask[:, None, None,:, :]
 
-    causal_mask = None
+    causal_mask = None # is causal language model attention mask
     # We enforce causality except for AUTOREGRESSION
     if model_mode != common_types.MODEL_MODE_AUTOREGRESSIVE:
       _, q_seq_len, _, _ = query.shape
@@ -599,15 +607,20 @@ class AttentionOp(nn.Module):
       deterministic: bool = False
   ):
     """Apply Attention."""
+    # query: btnh
+    print(f'query: {query.shape} key: {key.shape} value: {value.shape}')
+    # inputs_q: btd
+    print(f'inputs_q: {inputs_q.shape} inputs_kv: {inputs_kv.shape}')
+
     # Casting qk_product and softmaxt computation for float32 for model stability.
     if self.float32_qk_product:
       query = query.astype(jnp.float32)
       key = key.astype(jnp.float32)
 
     attn_weights = self.qk_product(query, key)
-    
+    # 5维
     attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
-
+    attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
     if self.float32_logits:
           attn_weights = attn_weights.astype(jnp.float32)
 
@@ -617,17 +630,17 @@ class AttentionOp(nn.Module):
     else:
       (pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd), \
       (post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd) = self.dyn_w_proj(inputs_q)
-
+    # print(f'attn_weights: {attn_weights.shape} pre_qw1: {pre_qw1.shape} pre_qw2: {pre_qw2.shape} pre_kw1: {pre_kw1.shape} pre_kw2: {pre_kw2.shape} pre_qdd: {pre_qdd.shape} pre_kdd: {pre_kdd.shape}')
     attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
-
     # apply attention mask
     if attn_mask is not None:
       attn_weights = apply_mask_to_logits(attn_weights, attn_mask)
 
     # normalize the attention weights
-    probs = jax.nn.softmax(attn_weights).astype(dtype)
+    probs = jax.nn.softmax(attn_weights).astype(self.dtype)
+    # print(f'probs post: {probs.shape} post_qw1: {post_qw1.shape} post_qw2: {post_qw2.shape} post_kw1: {post_kw1.shape} post_kw2: {post_kw2.shape} post_qdd: {post_qdd.shape} post_kdd: {post_kdd.shape}')
     probs = self.post_proj(probs, post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
-
+    
     # Casting softmaxt computation for float32 for model stability.
     probs = probs.astype(value.dtype)
 
@@ -635,9 +648,8 @@ class AttentionOp(nn.Module):
       probs = jnp.where((attn_mask >= DEFAULT_MASK_VALUE * 0.5), probs, 0.)
 
     # BNTS
-    out = jnp.einsum('bnts,bsnh->bnth', probs, value)
+    output = jnp.einsum('bnts,bsnh->btnh', probs, value)
     # result = jnp.reshape(out, (b, t, n_kv * g, d))
-
     return output
 
   def qk_product(self, query: Array, key: Array) -> Array:
@@ -656,9 +668,8 @@ class AttentionOp(nn.Module):
     n_kv = key.shape[-2]
     assert n_kv == self.num_kv_heads
     # normal: b t n d
-    query = jnp.reshape(query, (b, t, n_kv, n // n_kv, d))
     result = jnp.einsum('btnd,bsnd->bnts', query, key)
-    return result # (4, 8, 1, 1, 6)
+    return result
 
 
   def wv_product(
@@ -931,7 +942,7 @@ class AttentionOp(nn.Module):
     # lsp:训练的时候直接返回qkv ： (key, value, decoder_segment_ids), None
     prefill_kv_cache, ar_kv_cache = self.kv_cache(key, value, decoder_segment_ids, model_mode)
 
-    prefill_unnormalized_output, prefill_exponentials_max, prefill_exponentials_sum = self.apply_attention(
+    attn_out = self.apply_attention(
       query=query,
       key=prefill_kv_cache[0],
       value=prefill_kv_cache[1],
@@ -940,28 +951,8 @@ class AttentionOp(nn.Module):
       inputs_q=inputs_q,
       inputs_kv=inputs_kv,
     )
-    return prefill_unnormalized_output
-    # # Return the "prefill" cache if it actually the combined prefill+ar kv cache
-    # # None when training
-    # if ar_kv_cache is None:
-    #   if prefill_exponentials_sum is not None:
-    #     # here
-    #     print(f'prefill_exponentials_sum is not None.......')
-    #     return prefill_unnormalized_output / prefill_exponentials_sum
-    #   return prefill_unnormalized_output
-
-    # ar_unnormalized_output, ar_exponentials_max, ar_exponentials_sum  = self.apply_attention(
-    #   query=query,
-    #   key=ar_kv_cache[0],
-    #   value=ar_kv_cache[1],
-    #   decoder_segment_ids=ar_kv_cache[2],
-    #   model_mode=model_mode,
-    # )
-
-    # unnormalized_outputs = [prefill_unnormalized_output, ar_unnormalized_output]
-    # exponentials_maxes = [prefill_exponentials_max, ar_exponentials_max]
-    # exponentials_sums = [prefill_exponentials_sum, ar_exponentials_sum]
-    # return self.normalize_attention(unnormalized_outputs, exponentials_maxes, exponentials_sums)
+    print(f'attn_out: {attn_out.shape}')
+    return attn_out
 
 
 class Attention(nn.Module):
@@ -1157,12 +1148,15 @@ class Attention(nn.Module):
                                num_query_heads=self.num_query_heads,
                                num_kv_heads=self.num_kv_heads,
                                dropout_rate = self.dropout_rate,
-                               dtype=self.dtype)
+                               dtype=self.dtype,
+                               head_dim=value.shape[-1])
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
-
+    print(f'self.out_axis_names: {self.out_axis_names}')
+    # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
     out = nn.with_logical_constraint(out, self.out_axis_names)
-
     # apply output projection,  output dim is set to the input dim.
+    # inputs_q: (16, 2048, 4096)   head_nums * head_dim * model_dim
+    # (16, 2048, 32, 128)  * (  32, 128, 4096)  -> 16 * 2048 * 4096
     out = self.out_projection(inputs_q.shape[-1], out)
     return out

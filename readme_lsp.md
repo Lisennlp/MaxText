@@ -36,3 +36,10 @@ gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="
 ## 安装
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="bash setup.sh;/home/lishengping/miniconda3/bin/pip install -r MaxText/requirements_lsp.txt"
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME"
+
+
+
+export TPU_PREFIX=llm-jax-v3-8-10
+export ZONE=us-central1-a
+RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext0419'
+python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME

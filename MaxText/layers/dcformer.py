@@ -22,7 +22,7 @@ from flax import linen as nn
 from jax.sharding import Mesh
 import jax.numpy as jnp
 # from jax.experimental.pallas.ops.tpu import flash_attention
-from layers import dc_attention
+from layers import dc_attentions
 from layers import embeddings
 from layers import linears
 from layers import normalizations
@@ -39,7 +39,7 @@ Mesh = common_types.Mesh
 ScanIn = common_types.ScanIn
 
 Embed = embeddings.Embed
-Attention = dc_attention.Attention
+Attention = dc_attentions.Attention
 RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
 

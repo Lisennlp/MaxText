@@ -173,16 +173,16 @@ class Decoder(nn.Module):
       from layers import dcformer
       return dcformer.DcformerDecoderLayer
     else:
-      raise ValueError(f"Incorrect decoder_block name {self.config.decoder_block=}")
+      raise ValueError(f"Incorrect decoder_block name ”{self.config.decoder_block}“")
 
   def get_norm_layer(self):
-    if self.config.decoder_block in ("default", "llama2", "mistral", "gemma"):
+    if self.config.decoder_block in ("default", "llama2", "mistral", "gemma", "dcformer"):
       return RMSNorm
     elif self.config.decoder_block == "gpt3":
       from layers import gpt3
       return functools.partial(gpt3.Gpt3LayerNorm, reductions_in_fp32=False, use_bias=True)
     else:
-      raise ValueError(f"Incorrect decoder_block name {self.config.decoder_block=}")
+      raise ValueError(f"Incorrect decoder_block name ”{self.config.decoder_block}“")
 
   @nn.compact
   def __call__(self,
