@@ -113,9 +113,9 @@ class DenseGeneral(nn.Module):
     features = _canonicalize_tuple(self.features)
     axis = _canonicalize_tuple(self.axis) # -1 -> (-1, )
     # bf16
-    logging.info(f'dtype: {self.dtype}')
-    
-    inputs = jnp.asarray(inputs, self.dtype)
+    logging.info(f'inputs: {inputs.shape} dtype: {self.dtype} ')
+    dtype = jnp.bfloat16
+    inputs = jnp.asarray(inputs, dtype)
     # bsz * length * head_nums * head_dim
     axis = _normalize_axes(axis, inputs.ndim) # (-1, ) -> (3, )
 
@@ -126,7 +126,7 @@ class DenseGeneral(nn.Module):
         'kernel',
         nn.with_logical_partitioning(self.kernel_init, self.kernel_axes),
         kernel_shape,
-        self.dtype,
+        dtype,
         kernel_in_axis,
         kernel_out_axis,
     )

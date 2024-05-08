@@ -140,7 +140,8 @@ class DynamicWeightProjection(nn.Module):
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),
         # kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
-        kernel_axes=('embed', None, 'heads', 'mlp'),
+#        kernel_axes=('embed', None, 'heads', 'mlp'),
+        kernel_axes=('fsdp', 'data', None, 'tensor'),
         **kwargs)
       self.dw_hidden_activation = nn.gelu
 
@@ -150,7 +151,9 @@ class DynamicWeightProjection(nn.Module):
       shape = [G, self.n_splits, K, I, M]
       # self.qkw = DenseGeneral(axis=(-3, -2, -1), features=shape[3:],
       #   kernel_init=NormalInitializer(self.dynamic_w_init), **kwargs)
-      self.qkw = self.param('qkw', NormalInitializer(self.dynamic_w_init), shape, self.param_dtype)
+      kernel_init_shard = nn.with_logical_partitioning(nn.initializers.normal(self.dynamic_w_init), (None, 'data', 'fsdp', None, 'tensor'))
+            # self.qkw = self.param('qkw', nn.flax.linen.initializers.normal(self.dynamic_w_init), shape, self.param_dtype)
+      self.qkw = self.param('qkw', kernel_init_shard, shape, self.param_dtype)
   
     if self.dynamic_d_init is not None:
       self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits),
@@ -207,7 +210,7 @@ class DynamicWeightProjection(nn.Module):
 
 class CrossHeadProjection(nn.Module):
   dtype: Optional[Dtype] = None
-  param_dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.bfloat16
   precision: PrecisionLike = None
 
   num_heads: int = 0
@@ -298,7 +301,7 @@ class AttentionOp(nn.Module):
   dynamic_dropout_rate: float = None
   precision: PrecisionLike = None
   num_groups: int = 1
-  param_dtype: Any = jnp.float32
+  param_dtype: Any = jnp.bfloat16
   head_dim: int = 128
   deterministic: bool = False
 
@@ -616,14 +619,13 @@ class AttentionOp(nn.Module):
     if self.float32_qk_product:
       query = query.astype(jnp.float32)
       key = key.astype(jnp.float32)
-
+    print(f'query: {query.dtype}')
+    print(f'key: {key.dtype}')
     attn_weights = self.qk_product(query, key)
+    print(f'attn_weights: {attn_weights.dtype}')
     # 5维
     attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
     attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
-    if self.float32_logits:
-          attn_weights = attn_weights.astype(jnp.float32)
-
     if self.is_cross_attention:
         (pre_qw1, pre_qw2, pre_qdd), (post_qw1, post_qw2, post_qdd) = self.q_dyn_w_proj(inputs_q)
         (pre_kw1, pre_kw2, pre_kdd), (post_kw1, post_kw2, post_kdd) = self.k_dyn_w_proj(inputs_kv)
@@ -633,21 +635,29 @@ class AttentionOp(nn.Module):
     # print(f'attn_weights: {attn_weights.shape} pre_qw1: {pre_qw1.shape} pre_qw2: {pre_qw2.shape} pre_kw1: {pre_kw1.shape} pre_kw2: {pre_kw2.shape} pre_qdd: {pre_qdd.shape} pre_kdd: {pre_kdd.shape}')
     attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
     # apply attention mask
+    print(f'attn_weights11: {attn_weights.dtype}')
     if attn_mask is not None:
       attn_weights = apply_mask_to_logits(attn_weights, attn_mask)
-
+    
+    if self.float32_logits:
+          attn_weights = attn_weights.astype(jnp.float32)
     # normalize the attention weights
+    print(f'attn_weights222: {attn_weights.dtype}')
     probs = jax.nn.softmax(attn_weights).astype(self.dtype)
+    print(f'probs: {probs.dtype}')
     # print(f'probs post: {probs.shape} post_qw1: {post_qw1.shape} post_qw2: {post_qw2.shape} post_kw1: {post_kw1.shape} post_kw2: {post_kw2.shape} post_qdd: {post_qdd.shape} post_kdd: {post_kdd.shape}')
     probs = self.post_proj(probs, post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
     
+    print(f'probs111: {probs.dtype}')
     # Casting softmaxt computation for float32 for model stability.
     probs = probs.astype(value.dtype)
 
+    print(f'probs222: {probs.dtype}')
     if attn_mask is not None:
       probs = jnp.where((attn_mask >= DEFAULT_MASK_VALUE * 0.5), probs, 0.)
 
     # BNTS
+    print(f'probs333: {probs.dtype}')
     output = jnp.einsum('bnts,bsnh->btnh', probs, value)
     # result = jnp.reshape(out, (b, t, n_kv * g, d))
     return output

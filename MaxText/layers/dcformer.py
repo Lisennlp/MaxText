@@ -93,7 +93,7 @@ class DcformerDecoderLayer(nn.Module):
       dtype=cfg.dtype,
       dropout_rate=cfg.dropout_rate,
       name='self_attention',
-      float32_qk_product = True,  # computes logits in float32 for stability.
+      float32_qk_product = False,  # computes logits in float32 for stability.
       float32_logits = True,
       quant=self.quant)
 
