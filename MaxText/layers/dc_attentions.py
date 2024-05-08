@@ -139,21 +139,18 @@ class DynamicWeightProjection(nn.Module):
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),
-        # kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
-#        kernel_axes=('embed', None, 'heads', 'mlp'),
-        kernel_axes=('fsdp', 'data', None, 'tensor'),
+        kernel_init=nd_dense_init(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim)), 'fan_in', 'normal'), 
+       kernel_axes=('embed', None, 'heads', 'mlp'),
+        # kernel_axes=('fsdp', 'data', None, 'tensor'),
         **kwargs)
       self.dw_hidden_activation = nn.gelu
 
       G, K, M = self.num_groups, self.dynamic_w_hidden_dim, self.num_heads_per_group
       I = dynamic_hidden_dim * 2
-      # if not self.decompose_dynamic_w: I = M
       shape = [G, self.n_splits, K, I, M]
-      # self.qkw = DenseGeneral(axis=(-3, -2, -1), features=shape[3:],
-      #   kernel_init=NormalInitializer(self.dynamic_w_init), **kwargs)
-      kernel_init_shard = nn.with_logical_partitioning(nn.initializers.normal(self.dynamic_w_init), (None, 'data', 'fsdp', None, 'tensor'))
+      kernel_init_shard = nn.with_logical_partitioning(NormalInitializer(self.dynamic_w_init), (None, 'data', 'fsdp', None, 'tensor'))
             # self.qkw = self.param('qkw', nn.flax.linen.initializers.normal(self.dynamic_w_init), shape, self.param_dtype)
-      self.qkw = self.param('qkw', kernel_init_shard, shape, self.param_dtype)
+      self.qkw = self.param('qkw',kernel_init_shard, shape, self.param_dtype)
   
     if self.dynamic_d_init is not None:
       self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits),
@@ -190,6 +187,8 @@ class DynamicWeightProjection(nn.Module):
       # dw_hidden = jnp.einsum('BTD,DGCK->BTGCK', query_vec, theta.dw1)  # C=4 [pre,post]*[query,key]
       # w1, w2 = jnp.split(jnp.einsum('BTGCK,GCKIM->BTGCIM', dw_hidden, theta.qkw), 2, axis=-2)
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))
+      print(f'dw_hidden: {dw_hidden.dtype}')
+      print(f'dynamic_dropout_rate: {self.dynamic_dropout_rate}')
       if self.dynamic_dropout_rate is not None:
         dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)  # XD may add
       # w1, w2 = jnp.split(self.qkw(dw_hidden), 2, axis=-2)
@@ -229,8 +228,6 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
-    # self.w = DenseGeneral(axis=(1, 2), features=(self.num_heads_per_group,),  # BGMTS,GMN->BGNTS
-    #   kernel_init=NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), **kwargs)
     shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
     self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
 
@@ -240,11 +237,9 @@ class CrossHeadProjection(nn.Module):
     assert inputs.shape[1] == self.num_heads
     inputs = rearrange(inputs, 'B (G M) T S -> B G M T S', G=self.num_groups)
     inputs_label = 'BGMTS'
-
     ret = inputs
-    # ret += self.w(inputs)  # BGMTS,GMN->BGNTS
-    ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
-
+    # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
+    # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
     if qw1 is not None:
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
       for sym, (w1, w2) in zip(['T', 'S'], [(qw1, qw2), (kw1, kw2)]):
@@ -304,9 +299,6 @@ class AttentionOp(nn.Module):
   param_dtype: Any = jnp.bfloat16
   head_dim: int = 128
   deterministic: bool = False
-
-  # kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.lecun_normal()
-  # bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
   def setup(self):
     if self.dynamic_compose:
@@ -621,6 +613,7 @@ class AttentionOp(nn.Module):
       key = key.astype(jnp.float32)
     print(f'query: {query.dtype}')
     print(f'key: {key.dtype}')
+    # bnts
     attn_weights = self.qk_product(query, key)
     print(f'attn_weights: {attn_weights.dtype}')
     # 5维
@@ -1159,7 +1152,8 @@ class Attention(nn.Module):
                                num_kv_heads=self.num_kv_heads,
                                dropout_rate = self.dropout_rate,
                                dtype=self.dtype,
-                               head_dim=value.shape[-1])
+                               head_dim=value.shape[-1],
+                               deterministic=deterministic)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
     print(f'self.out_axis_names: {self.out_axis_names}')
