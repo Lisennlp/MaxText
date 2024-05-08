@@ -107,7 +107,7 @@ def load_next_batch(train_iter, example_batch, config):
 def record_scalar_metrics(metrics, step_time_delta, per_device_tflops, lr):
   """Records scalar metrics to be written to tensorboard"""
   metrics['scalar'].update({
-      'perf/step_time_seconds': step_time_delta.total_seconds()
+      'perf/step_time_seconds': 1 / step_time_delta.total_seconds() #  s/step -> step/s
   })
   metrics['scalar'].update({
       'perf/per_device_tflops' : per_device_tflops

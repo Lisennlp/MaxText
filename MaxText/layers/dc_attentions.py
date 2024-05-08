@@ -70,6 +70,9 @@ dynamic_vector_slice_in_dim = jax.vmap(
     lax.dynamic_slice_in_dim, in_axes=(None, 0, None, None))
 
 
+JTensor = jnp.ndarray
+
+
 def apply_mask_to_logits(logits: Array, mask: Array):
   """Applies a floating-point mask to a set of logits.
 
@@ -100,6 +103,52 @@ def _maybe_aqt_einsum(quant: Quant):
   return jnp.einsum if quant is None else quant.einsum()
 
 
+def get_large_negative_number(dtype: jnp.dtype) -> JTensor:
+    """Returns a large negative value for the given dtype."""
+    # -0.7 is a float64 in Jax. Explicit cast output to target dtype.
+    if jnp.issubdtype(dtype, jnp.inexact):
+      dtype_max = jnp.finfo(dtype).max
+    elif jnp.issubdtype(dtype, jnp.integer):
+      dtype_max = jnp.iinfo(dtype).max
+    else:
+      raise ValueError('Unsupported dtype for inputs.')
+    return jnp.asarray(-0.7 * dtype_max, dtype=dtype)
+  
+
+def _compute_slide_attn_mask(w, window_size, length: int, dtype: jnp.dtype = jnp.bfloat16) -> JTensor:
+  """
+  w: query chunk size
+  window_size: window size
+  length: query length that before split
+  dtype: query dtype
+  """
+  # w = 256
+  # length = 2048
+  # window_size = 1600
+  if w is None:
+    w = length
+  if window_size is None:
+    offset = length - w
+  else:
+    offset = min(window_size, length - w)
+  x = jnp.ones([w, w + offset])
+  m1 = jnp.triu(x, k=offset + 1)
+  if window_size is not None:
+    if window_size < length - w:
+        m2 = jnp.tril(x, k=0)
+    else:
+        m2 = jnp.tril(x, k=length - window_size - w)
+    m = m1 + m2
+  else:
+    m = m1
+  large_negative_number = get_large_negative_number(dtype)
+  m = m.astype(dtype)
+  # m = m * large_negative_number or as follow:
+  m = jnp.where((m > 0.5), large_negative_number, m)
+  # bnts
+  return m[jnp.newaxis, jnp.newaxis, ...]
+
+
 def unbind(ary, n, axis=0):
   return [jnp.squeeze(a, axis=axis) for a in jnp.split(ary, n, axis=axis)]
 
@@ -124,6 +173,7 @@ class DynamicWeightProjection(nn.Module):
   # dw_hidden_activation_cls: activations_lib.BaseActivation = None  # mqy
   deterministic: bool = False
   dynamic_dropout_rate: Optional[float] = None
+  quant: Optional[Quant] = None
 
   def setup(self) -> None:
     self.num_heads_per_group = self.num_heads // self.num_groups
@@ -138,7 +188,7 @@ class DynamicWeightProjection(nn.Module):
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
-      self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),
+      self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,
         kernel_init=nd_dense_init(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim)), 'fan_in', 'normal'), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
         # kernel_axes=('fsdp', 'data', None, 'tensor'),
@@ -153,7 +203,7 @@ class DynamicWeightProjection(nn.Module):
       self.qkw = self.param('qkw',kernel_init_shard, shape, self.param_dtype)
   
     if self.dynamic_d_init is not None:
-      self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits),
+      self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits), quant=self.quant,
         # kernel_init=NormalInitializer(self.dynamic_d_init),
          **kwargs
         )
@@ -299,6 +349,8 @@ class AttentionOp(nn.Module):
   param_dtype: Any = jnp.bfloat16
   head_dim: int = 128
   deterministic: bool = False
+  window_size: int = None
+  query_chunk_size: int = None
 
   def setup(self):
     if self.dynamic_compose:
@@ -318,6 +370,7 @@ class AttentionOp(nn.Module):
             dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
             deterministic=self.deterministic,
             dynamic_dropout_rate=self.dynamic_dropout_rate,
+            quant=self.quant,
           ))
       else:
         self.dyn_w_proj = DynamicWeightProjection(
@@ -330,6 +383,7 @@ class AttentionOp(nn.Module):
           dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
           deterministic=self.deterministic,
           dynamic_dropout_rate=self.dynamic_dropout_rate,
+          quant=self.quant,
         )
       for name in ['pre_proj', 'post_proj']:
         setattr(self, name, CrossHeadProjection(
@@ -597,16 +651,71 @@ class AttentionOp(nn.Module):
       value: Array, 
       decoder_segment_ids: Array | None,
       model_mode: str = common_types.MODEL_MODE_TRAIN,
-      inputs_q: Array = None,
-      inputs_kv: Array = None,
+      query_vec: Array = None,
+      key_vec: Array = None,
+      deterministic: bool = False
+  ):
+    b, t, n, _ = query.shape
+    h = value.shape[-1]
+    s = key.shape[1]
+    # attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
+    # attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1]) # 1 1 t s
+    # 实时计算ATtention mask
+    attn_mask = _compute_slide_attn_mask(self.query_chunk_size, self.window_size, t, query.dtype)
+
+    if hasattr(self, 'dyn_w_proj'):
+        print(f'run dyn_w_proj')
+        pre_proj_dw_args, post_proj_dw_args = self.dyn_w_proj(query_vec)
+    else:
+        print(f'run dyn_w_pre_proj  dyn_w_post_proj')
+        if hasattr(self, 'dyn_w_pre_proj'):
+          pre_proj_dw_args = self.dyn_w_pre_proj(query_vec)
+        if hasattr(self, 'dyn_w_post_proj'):
+          post_proj_dw_args = self.dyn_w_post_proj(key_vec)
+
+    if self.query_chunk_size is None:
+      encoded = self._apply_attention_dot(query, key, value, attn_mask,  
+                                                  pre_proj_dw_args=pre_proj_dw_args, 
+                                                  post_proj_dw_args=post_proj_dw_args, 
+                                                  deterministic=deterministic
+                                                  )
+    else:
+      w = self.query_chunk_size
+      assert t % w == 0, f'{t} % {w} != 0'
+      encoded = jnp.zeros((b, t, n, h), dtype=value.dtype)
+      for i in range(t // w):
+        start, stop = i * w, (i + 1) * w
+        kv_start = max(0, stop - w - self.window_size) if self.window_size is not None else 0
+        _query = query[:, start : stop]
+        _key, _value = key[:, kv_start : stop], value[:, kv_start : stop]
+        _attn_mask = attn_mask[..., -_key.shape[1]:]
+
+        def slice_dw(qw1, qw2, kw1, kw2, qdd, kdd):
+          return (qw1[:, start : stop] if qw1 is not None else None,
+            qw2[:, start : stop] if qw2 is not None else None,
+            kw1[:, kv_start : stop] if kw1 is not None else None,
+            kw2[:, kv_start : stop] if kw2 is not None else None,
+            qdd[:, start : stop] if qdd is not None else None,
+            kdd[:, kv_start : stop] if kdd is not None else None)
+        _pre_proj_dw_args = slice_dw(*pre_proj_dw_args)
+        _post_proj_dw_args = slice_dw(*post_proj_dw_args)
+        _encoded = self._apply_attention_dot(_query, _key, _value, _attn_mask,
+          _pre_proj_dw_args, _post_proj_dw_args)
+        encoded = encoded.at[:, start : stop].set(_encoded)
+    return encoded
+
+  def _apply_attention_dot(
+      self,
+      query: Array, 
+      key: Array,   
+      value: Array, 
+      attn_mask: Array | None,
+      pre_proj_dw_args: tuple = (),
+      post_proj_dw_args: tuple = (),
       deterministic: bool = False
   ):
     """Apply Attention."""
     # query: btnh
-    print(f'query: {query.shape} key: {key.shape} value: {value.shape}')
-    # inputs_q: btd
-    print(f'inputs_q: {inputs_q.shape} inputs_kv: {inputs_kv.shape}')
-
     # Casting qk_product and softmaxt computation for float32 for model stability.
     if self.float32_qk_product:
       query = query.astype(jnp.float32)
@@ -617,14 +726,19 @@ class AttentionOp(nn.Module):
     attn_weights = self.qk_product(query, key)
     print(f'attn_weights: {attn_weights.dtype}')
     # 5维
-    attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
-    attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
-    if self.is_cross_attention:
-        (pre_qw1, pre_qw2, pre_qdd), (post_qw1, post_qw2, post_qdd) = self.q_dyn_w_proj(inputs_q)
-        (pre_kw1, pre_kw2, pre_kdd), (post_kw1, post_kw2, post_kdd) = self.k_dyn_w_proj(inputs_kv)
-    else:
-      (pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd), \
-      (post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd) = self.dyn_w_proj(inputs_q)
+    # attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
+    # attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
+
+    # if self.is_cross_attention:
+    #     (pre_qw1, pre_qw2, pre_qdd), (post_qw1, post_qw2, post_qdd) = self.q_dyn_w_proj(inputs_q)
+    #     (pre_kw1, pre_kw2, pre_kdd), (post_kw1, post_kw2, post_kdd) = self.k_dyn_w_proj(inputs_kv)
+    # else:
+    #   (pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd), \
+    #   (post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd) = self.dyn_w_proj(inputs_q)
+
+    pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd = pre_proj_dw_args
+    post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd = post_proj_dw_args
+
     # print(f'attn_weights: {attn_weights.shape} pre_qw1: {pre_qw1.shape} pre_qw2: {pre_qw2.shape} pre_kw1: {pre_kw1.shape} pre_kw2: {pre_kw2.shape} pre_qdd: {pre_qdd.shape} pre_kdd: {pre_kdd.shape}')
     attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
     # apply attention mask
@@ -995,7 +1109,6 @@ class Attention(nn.Module):
   float32_logits: bool = True  # cast logits in float32 for stability.
   quant: Optional[Quant] = None
 
-
   query_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
   key_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
   value_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
@@ -1126,20 +1239,17 @@ class Attention(nn.Module):
     )(inputs=query, position=inputs_positions)
     key = self.key_rotary(key, inputs_positions)
 
-    # annotate with sharding constraint.
-    # ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
-      #   ['activation_batch', ['data', 'fsdp', 'fsdp_transpose',]],
-      #   ['activation_heads', ['tensor','sequence']],
-      #    ['activation_length', 'sequence'],
-      #  ['activation_kv', 'tensor'],
-# mesh_axes: ['data', 'fsdp', 'fsdp_transpose', 'sequence', 'tensor', 'autoregressive']
-
     query = nn.with_logical_constraint(query, self.query_axis_names)
     query = checkpoint_name(query, 'query_proj')
     key = nn.with_logical_constraint(key, self.key_axis_names)
     key = checkpoint_name(key, 'key_proj')
     value = nn.with_logical_constraint(value, self.value_axis_names)
     value = checkpoint_name(value, 'value_proj')
+
+    if self.config.query_chunk_size:
+      query_chunk_size = int(query_chunk_size)
+    else:
+      query_chunk_size = None
 
     attention_op = AttentionOp(mesh=self.mesh,
                                attention_kernel=self.attention_kernel,
@@ -1153,6 +1263,7 @@ class Attention(nn.Module):
                                dropout_rate = self.dropout_rate,
                                dtype=self.dtype,
                                head_dim=value.shape[-1],
+                               query_chunk_size=query_chunk_size,
                                deterministic=deterministic)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
