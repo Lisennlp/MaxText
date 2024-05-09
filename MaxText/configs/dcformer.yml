@@ -76,6 +76,7 @@ base_num_decoder_layers: 48
 window_size: [256, 256, 256, null] # null or list. ex: [256, null]
 num_layers_per_block: 4 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
 query_chunk_size: 128 # null or int.
+max_target_length: 4096 # Maximum sequence length
 
 head_dim: 128
 # mixture of experts (moe)
@@ -187,7 +188,6 @@ learning_rate_schedule_steps: -1 # By default the length of the schedule is set 
 # However you may choose a longer schedule (learning_rate_schedule_steps > steps), in which case the training will end before
 # dropping fully down. Or you may choose a shorter schedule, where the unspecified steps will have a learning rate of 0.
 
-max_target_length: 2048 # Maximum sequence length
 max_prefill_predict_length: 64 # Maximum length for the prefill when doing autoregression
 prompt: "I love to" # Prompt for language model sampling.
 load_from_prefill_dir: False # If true, decode.py doesn't "prefill" but just reads from directory

@@ -246,7 +246,7 @@ class Gpt3DecoderLayer(nn.Module):
   config: models.Config
   mesh: Mesh
   quant: Optional[Quant] = None
-
+  
   @nn.compact
   def __call__(self,
                inputs,
@@ -255,6 +255,20 @@ class Gpt3DecoderLayer(nn.Module):
                deterministic,
                model_mode,
                num_layers_per_block=1,
+               ):
+    print(f'num_layers_per_block: {num_layers_per_block}')
+    for i in range(num_layers_per_block):
+        layer_output = self.sub_block(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, i)
+        inputs = layer_output[0] if self.config.scan_layers else layer_output
+    return layer_output
+
+  def sub_block(self,
+               inputs,
+               decoder_segment_ids,
+               decoder_positions,
+               deterministic,
+               model_mode,
+               num_layers_per_block=1
                ):
     cfg = self.config
     mesh = self.mesh
