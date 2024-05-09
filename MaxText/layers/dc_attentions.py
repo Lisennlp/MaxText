@@ -699,8 +699,7 @@ class AttentionOp(nn.Module):
             kdd[:, kv_start : stop] if kdd is not None else None)
         _pre_proj_dw_args = slice_dw(*pre_proj_dw_args)
         _post_proj_dw_args = slice_dw(*post_proj_dw_args)
-        _encoded = self._apply_attention_dot(_query, _key, _value, _attn_mask,
-          _pre_proj_dw_args, _post_proj_dw_args)
+        _encoded = self._apply_attention_dot(_query, _key, _value, _attn_mask, _pre_proj_dw_args, _post_proj_dw_args)
         encoded = encoded.at[:, start : stop].set(_encoded)
     return encoded
 
@@ -715,8 +714,7 @@ class AttentionOp(nn.Module):
       deterministic: bool = False
   ):
     """Apply Attention."""
-    # query: btnh
-    # Casting qk_product and softmaxt computation for float32 for model stability.
+    # Casting qk_product and softmaxt computation for float32 for model stability. query: btnh
     if self.float32_qk_product:
       query = query.astype(jnp.float32)
       key = key.astype(jnp.float32)
@@ -763,10 +761,8 @@ class AttentionOp(nn.Module):
     if attn_mask is not None:
       probs = jnp.where((attn_mask >= DEFAULT_MASK_VALUE * 0.5), probs, 0.)
 
-    # BNTS
     print(f'probs333: {probs.dtype}')
     output = jnp.einsum('bnts,bsnh->btnh', probs, value)
-    # result = jnp.reshape(out, (b, t, n_kv * g, d))
     return output
 
   def qk_product(self, query: Array, key: Array) -> Array:
@@ -1025,33 +1021,6 @@ class AttentionOp(nn.Module):
     else:
       raise ValueError(f"Model Mode isn't supported! {model_mode=}")
   
-  
-  def normalize_attention(self, 
-                          local_outs,
-                          local_maxes,
-                          local_sums):
-    """Normalize across multiple localized attentions
-
-    Args:
-        local_outs (list): List of unnormalized outputs entries for each local attention
-        local_maxes (list): List of max exponentials entries for each local attention
-        local_sums (list): List of exponential sum entries for each local attention
-
-    Returns:
-        Array: Combined attention that has been normalized 
-    """
-    # Based on https://github.com/google-research/google-research/blob/master/scaling_transformer_inference_efficiency/attention.py
-    global_max = functools.reduce(jnp.maximum, local_maxes)
-    global_sum = sum([
-      jnp.exp(local_max - global_max) * local_sum
-      for (local_sum, local_max) in zip(local_sums, local_maxes)
-    ])
-
-    attn_out = 0
-    for local_max, local_out in zip(local_maxes, local_outs):
-      local_normalizer = jnp.exp(local_max - global_max) / global_sum
-      attn_out += local_normalizer * local_out
-    return attn_out
 
   # lsp: atten call
   @nn.compact
@@ -1247,7 +1216,7 @@ class Attention(nn.Module):
     value = checkpoint_name(value, 'value_proj')
 
     if self.config.query_chunk_size:
-      query_chunk_size = int(query_chunk_size)
+      query_chunk_size = int(self.config.query_chunk_size)
     else:
       query_chunk_size = None
 
@@ -1264,10 +1233,10 @@ class Attention(nn.Module):
                                dtype=self.dtype,
                                head_dim=value.shape[-1],
                                query_chunk_size=query_chunk_size,
+                               window_size=window_size,
                                deterministic=deterministic)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
-    print(f'self.out_axis_names: {self.out_axis_names}')
     # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
     out = nn.with_logical_constraint(out, self.out_axis_names)
     # apply output projection,  output dim is set to the input dim.

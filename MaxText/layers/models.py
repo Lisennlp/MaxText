@@ -211,7 +211,7 @@ class Decoder(nn.Module):
         num_embeddings=cfg.trainable_position_size,
         features=cfg.emb_dim,
         dtype=cfg.dtype,
-        embedding_init=nn.initializers.normal(stddev=1.0),
+        embedding_init=nn.initializers.normal(stddev=0.006), # lsp
         name='position_embedder',
         config=cfg)(decoder_positions)
 

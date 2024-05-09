@@ -91,7 +91,6 @@ attention: 'dot_product' # Supported attention: dot_product, flash, cudnn_flash_
 # Combine matmuls for QKV and MLP
 fused_qkv: False
 fused_mlp: False
-
 record_internal_nn_metrics: 0
 
 # Output directory
@@ -159,7 +158,7 @@ tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
 eval_split: 'validation'
-per_device_batch_size: 8.0
+per_device_batch_size: 4.0
 eval_per_device_batch_size: 0
 max_corpus_chars: 10_000_000
 dataset_type: c4 # must be c4 or synthetic
@@ -243,3 +242,5 @@ decode_sampling_temperature: 1.
 
 eval_interval: -1  # the specific number of train step between eval_step
 target_eval_loss: 0.  # early stop once reaching target eval_loss
+
+window_size: null

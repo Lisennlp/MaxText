@@ -61,6 +61,29 @@ class DcformerDecoderLayer(nn.Module):
                decoder_positions,
                deterministic,
                model_mode,
+               repeat,
+               ):
+    window_size = self.config.get('window_size', None)
+    if window_size is None:
+        window_size = [None]
+    elif isinstance(window_size, list):
+        for size in window_size:
+            assert isinstance(size, int), print(f'window_size value error: {size}')
+    else:
+        raise ValueError(f'Window size: ‘{window_size}’ type is error.....')
+        
+    for i in range(repeat):
+        layer_output = self._call(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, window_size[i])
+        inputs = layer_output[0] if cfg.scan_layers else layer_output
+    return layer_output
+        
+  def _call(self,
+               inputs,
+               decoder_segment_ids,
+               decoder_positions,
+               deterministic,
+               model_mode,
+               window_size,
                ):
     cfg = self.config
     mesh = self.mesh
@@ -95,7 +118,8 @@ class DcformerDecoderLayer(nn.Module):
       name='self_attention',
       float32_qk_product = False,  # computes logits in float32 for stability.
       float32_logits = True,
-      quant=self.quant)
+      quant=self.quant,
+      window_size=window_size)
 
     attention_lnx = attention_layer(
             lnx,
