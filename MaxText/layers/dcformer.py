@@ -28,6 +28,7 @@ from layers import linears
 from layers import normalizations
 from layers import models
 from layers import quantizations
+import jax
 
 import common_types
 from typing import Optional
@@ -44,7 +45,7 @@ RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
 
 #-----------------------------------------
-# The Decoder Layer specific for Llama2
+# The Decoder Layer specific for Dcformer
 #-----------------------------------------
 
 
@@ -61,29 +62,40 @@ class DcformerDecoderLayer(nn.Module):
                decoder_positions,
                deterministic,
                model_mode,
-               repeat,
+               num_layers_per_block=None,
                ):
-    window_size = self.config.get('window_size', None)
+    num_layers_per_block = 1 if num_layers_per_block is None else int(num_layers_per_block)
+    window_size = self.config.window_size
+    print(f'num_layers_per_block: {num_layers_per_block} window_size: {window_size}')
     if window_size is None:
         window_size = [None]
     elif isinstance(window_size, list):
         for size in window_size:
-            assert isinstance(size, int), print(f'window_size value error: {size}')
+            assert isinstance(size, int) or size is None, print(f'window_size value error: {size}')
     else:
         raise ValueError(f'Window size: ‘{window_size}’ type is error.....')
-        
-    for i in range(repeat):
-        layer_output = self._call(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, window_size[i])
-        inputs = layer_output[0] if cfg.scan_layers else layer_output
+
+    # if self.config.remat:
+    #     sub_block_fn = nn.remat(
+    #         self.sub_block, policy=jax.checkpoint_policies.nothing_saveable
+    #     )
+    # else:
+    #     sub_block_fn = self.sub_block
+
+    for i in range(num_layers_per_block):
+        layer_output = sub_block_fn(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, window_size[i], i)
+        inputs = layer_output[0] if self.config.scan_layers else layer_output
+
     return layer_output
         
-  def _call(self,
+  def sub_block(self,
                inputs,
                decoder_segment_ids,
                decoder_positions,
                deterministic,
                model_mode,
                window_size,
+               block_index,
                ):
     cfg = self.config
     mesh = self.mesh
@@ -94,7 +106,7 @@ class DcformerDecoderLayer(nn.Module):
 
     lnx_rms = models.RMSNorm(
         dtype=cfg.dtype,
-        name='pre_self_attention_layer_norm',
+        name=f'pre_self_attention_layer_norm_{block_index}',
         kernel_axes=('embed',),
         epsilon=cfg.normalization_layer_epsilon,
         )
@@ -103,6 +115,7 @@ class DcformerDecoderLayer(nn.Module):
     lnx = nn.with_logical_constraint(
         lnx, ('activation_batch', 'activation_length', 'activation_embed'))
 
+    assert cfg.attention == 'dot_product', print(f'Now dcformer model only support ’dot_product‘ method to compute attention')
     # Self-attention block
     attention_layer = Attention(
       config = cfg,
@@ -115,7 +128,7 @@ class DcformerDecoderLayer(nn.Module):
       mesh=mesh,
       dtype=cfg.dtype,
       dropout_rate=cfg.dropout_rate,
-      name='self_attention',
+      name=f'self_attention_{block_index}',
       float32_qk_product = False,  # computes logits in float32 for stability.
       float32_logits = True,
       quant=self.quant,
@@ -136,7 +149,7 @@ class DcformerDecoderLayer(nn.Module):
 
     # Fully Connected
     hidden_states = models.RMSNorm(
-        dtype=cfg.dtype, name='post_self_attention_layer_norm', kernel_axes=('embed',),
+        dtype=cfg.dtype, name=f'post_self_attention_layer_norm_{block_index}', kernel_axes=('embed',),
         epsilon=cfg.normalization_layer_epsilon,
         )(intermediate_inputs)
     hidden_states = nn.with_logical_constraint(hidden_states, ('activation_batch', 'activation_length', 'activation_embed'))
@@ -147,14 +160,13 @@ class DcformerDecoderLayer(nn.Module):
         activations=cfg.mlp_activations,
         intermediate_dropout_rate=cfg.dropout_rate,
         dtype=cfg.dtype,
-        name='mlp',
+        name=f'mlp_{block_index}',
         config=cfg,
         quant=self.quant,
     )(hidden_states, deterministic=deterministic)
     mlp_lnx = nn.with_logical_constraint(
         mlp_lnx, ('activation_batch', 'activation_length', 'activation_embed')
     )
-
 
     layer_output = mlp_lnx + intermediate_inputs
 

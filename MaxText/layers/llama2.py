@@ -61,7 +61,21 @@ class LlamaDecoderLayer(nn.Module):
                decoder_positions,
                deterministic,
                model_mode,
+               num_layers_per_block=1,
                ):
+    for i in range(num_layers_per_block):
+        layer_output = self.sub_block(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, i)
+        inputs = layer_output[0] if self.config.scan_layers else layer_output
+    return layer_output
+
+  def sub_block(self,
+               inputs,
+               decoder_segment_ids,
+               decoder_positions,
+               deterministic,
+               model_mode,
+               block_index):
+
     cfg = self.config
     mesh = self.mesh
 
@@ -71,7 +85,7 @@ class LlamaDecoderLayer(nn.Module):
 
     lnx_rms = models.RMSNorm(
         dtype=cfg.dtype,
-        name='pre_self_attention_layer_norm',
+        name=f'pre_self_attention_layer_norm_{block_index}',
         kernel_axes=('embed',),
         epsilon=cfg.normalization_layer_epsilon,
         )
@@ -92,7 +106,7 @@ class LlamaDecoderLayer(nn.Module):
       mesh=mesh,
       dtype=cfg.dtype,
       dropout_rate=cfg.dropout_rate,
-      name='self_attention',
+      name=f'self_attention_{block_index}',
       float32_qk_product = True,  # computes logits in float32 for stability.
       float32_logits = True,
       quant=self.quant)
@@ -112,7 +126,7 @@ class LlamaDecoderLayer(nn.Module):
 
     # Fully Connected
     hidden_states = models.RMSNorm(
-        dtype=cfg.dtype, name='post_self_attention_layer_norm', kernel_axes=('embed',),
+        dtype=cfg.dtype, name=f'post_self_attention_layer_norm_{block_index}', kernel_axes=('embed',),
         epsilon=cfg.normalization_layer_epsilon,
         )(intermediate_inputs)
     hidden_states = nn.with_logical_constraint(hidden_states, ('activation_batch', 'activation_length', 'activation_embed'))
@@ -123,7 +137,7 @@ class LlamaDecoderLayer(nn.Module):
         activations=cfg.mlp_activations,
         intermediate_dropout_rate=cfg.dropout_rate,
         dtype=cfg.dtype,
-        name='mlp',
+        name=f'mlp_{block_index}',
         config=cfg,
         quant=self.quant,
     )(hidden_states, deterministic=deterministic)

@@ -256,12 +256,13 @@ class Decoder(nn.Module):
               'dropout': cfg.enable_dropout,
           },
           in_axes=(
+              nn.broadcast,  # block‘s five args
               nn.broadcast,
               nn.broadcast,
               nn.broadcast,
               nn.broadcast,
           ),
-          length=cfg.num_decoder_layers,
+          length=cfg.num_decoder_layers // cfg.num_layers_per_block,  # layer nums
           metadata_params={nn.PARTITION_NAME: 'layers'},
       )(config=cfg, mesh=mesh, name='layers', quant=self.quant)(
           y,
@@ -269,6 +270,7 @@ class Decoder(nn.Module):
           decoder_positions,
           deterministic,
           model_mode,
+          cfg.num_layers_per_block, # lsp
       )
     else:
       for lyr in range(cfg.num_decoder_layers):
@@ -279,6 +281,7 @@ class Decoder(nn.Module):
             decoder_positions,
             deterministic,
             model_mode,
+            num_layers_per_block=cfg.num_layers_per_block, # lsp
         )
 
     y = self.get_norm_layer()(

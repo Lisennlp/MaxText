@@ -57,8 +57,7 @@ save_config_to_gcs: False
 
 # Activation dtypes.
 dtype: "bfloat16"
-quantization: ""
-query_chunk_size: null # null or int.
+quantization: "int8"
 # Shard the range finding operation for quantization. By default this is set to number of slices.
 quantization_local_shard_count: -1
 
@@ -73,6 +72,11 @@ base_num_query_heads: 32
 base_num_kv_heads: 32
 base_mlp_dim: 5504
 base_num_decoder_layers: 48
+# lsp pax
+window_size: [256, 256, 256, null] # null or list. ex: [256, null]
+num_layers_per_block: 4 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
+query_chunk_size: 128 # null or int.
+
 head_dim: 128
 # mixture of experts (moe)
 num_experts: 1
@@ -87,7 +91,7 @@ logits_dot_in_fp32: True  # whether to use fp32 in logits_dense or shared_embedd
 remat_policy: 'full'
 scan_layers: True
 param_scan_axis: 1
-attention: 'dot_product' # Supported attention: dot_product, flash, cudnn_flash_te
+attention: 'dot_product' # Supported attention: dot_product, flash, cudnn_flash_te   , but dcformer only support dot_product
 # Combine matmuls for QKV and MLP
 fused_qkv: False
 fused_mlp: False
@@ -242,5 +246,3 @@ decode_sampling_temperature: 1.
 
 eval_interval: -1  # the specific number of train step between eval_step
 target_eval_loss: 0.  # early stop once reaching target eval_loss
-
-window_size: null

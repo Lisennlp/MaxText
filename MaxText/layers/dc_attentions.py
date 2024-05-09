@@ -1082,6 +1082,7 @@ class Attention(nn.Module):
   key_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
   value_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
   out_axis_names: AxisNames = (BATCH, LENGTH, HEAD, D_KV)
+  window_size: int = None
 
   def query_projection(self, inputs_q: Array) -> Array:
     """Query projection."""
@@ -1233,7 +1234,7 @@ class Attention(nn.Module):
                                dtype=self.dtype,
                                head_dim=value.shape[-1],
                                query_chunk_size=query_chunk_size,
-                               window_size=window_size,
+                               window_size=self.window_size,
                                deterministic=deterministic)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
