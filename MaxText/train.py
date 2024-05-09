@@ -227,6 +227,7 @@ def loss_fn(model, config, data, dropout_rng, params, is_train=True):
                        data['inputs'],
                        data['inputs_position'],
                        decoder_segment_ids=data['inputs_segmentation'],
+                       
                        enable_dropout=config.enable_dropout if is_train else False,
                        rngs={'dropout': rng1, 'params': aqt_rng}, mutable='intermediates')
   one_hot_targets = jax.nn.one_hot(data['targets'], config.vocab_size)
@@ -397,7 +398,6 @@ def train_loop(config, state=None):
       config
     )
 
-
   num_model_parameters = max_utils.calculate_num_params_from_pytree(state.params)
   max_logging.log(f"number parameters: {num_model_parameters/10**9:.3f} billion")
   per_device_tflops = calculate_training_tflops(num_model_parameters, config)
@@ -441,6 +441,7 @@ def train_loop(config, state=None):
   example_batch = None
   last_step_completion = datetime.datetime.now()
 
+  eval_loop_num_batches = 0
   for step in np.arange(start_step, config.steps):
     if step == first_profiling_step:
       max_utils.activate_profiler(config)
@@ -470,13 +471,23 @@ def train_loop(config, state=None):
     if config.eval_interval > 0 and step > start_step and step % config.eval_interval == 0:
       assert eval_data_iterator
       cumulative_eval_metrics = {"total_loss": 0., "total_weights": 0.}
-      for eval_batch in eval_data_iterator:
-        with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
-          eval_metrics = p_eval_step(
-            state, eval_batch, nextrng
-          )
-        cumulative_eval_metrics['total_loss'] += float(eval_metrics['scalar']['evaluation/total_loss'])
-        cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
+      try:
+        for eval_batch in eval_data_iterator:
+          with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
+            eval_metrics = p_eval_step(
+              state, eval_batch, nextrng
+            )
+          
+          cumulative_eval_metrics['total_loss'] += float(eval_metrics['scalar']['evaluation/total_loss'])
+          cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
+          # lsp
+          eval_loop_num_batches += 1
+          if eval_loop_num_batches % config.eval_loop_num_batches == 0:
+            break
+      except Exception as e:
+        eval_data_iterator = eval_data_iterator.reset()
+        print(f'Reset to new eval dataloadr')
+
       eval_loss = cumulative_eval_metrics['total_loss'] / (cumulative_eval_metrics['total_weights'] + EPS)
       max_logging.log(f"average loss after {step=}: {eval_loss=}, total_weights={cumulative_eval_metrics['total_weights']}")
       if eval_loss <= config.target_eval_loss:

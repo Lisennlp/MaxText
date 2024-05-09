@@ -73,11 +73,19 @@ base_num_kv_heads: 32
 base_mlp_dim: 5504
 base_num_decoder_layers: 48
 # lsp pax
-window_size: [256, 256, 256, null] # null or list. ex: [256, null]
-num_layers_per_block: 4 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
-query_chunk_size: 128 # null or int.
-max_target_length: 4096 # Maximum sequence length
-
+window_size: [null] # null or list. ex: [256, null]
+num_layers_per_block: 1 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
+query_chunk_size: null # null or int.
+max_target_length: 4097 # Maximum sequence length
+reset_for_eval: True # True will rest eval dataset
+epoch: 1
+train_shuffle_buffer_size: null # null or int
+eval_shuffle_buffer_size: null # null or int
+training_num_batches_to_skip: null # skip data , null or int
+zero_loss: False # whether to compute id zero   when eval data
+iter_file_nums: 2 # how many files every file batch
+eval_loop_num_batches: 100
+ 
 head_dim: 128
 # mixture of experts (moe)
 num_experts: 1
@@ -157,16 +165,17 @@ num_slices: -1
 
 # Dataset
 # Replace with your path given as argument in download_dataset.sh, e.g. "gs://my-maxtext-dataset/"
-dataset_path: "gs://common_datasets_us-east5/" # lsp
+# dataset_path: {'train': "gs://common_datasets_us-east5/"} # c4
+dataset_path: gs://common_datasets_us-east5/pythia_pile_idxmaps_tfrecord
 vocab_size: 50256 # powers of 2 for sharding
 tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
-eval_split: 'validation'
+eval_split: 'val_with_eos'
 per_device_batch_size: 4.0
-eval_per_device_batch_size: 0
+# eval_per_device_batch_size: 4.0 # eval also use per_device_batch_size
 max_corpus_chars: 10_000_000
-dataset_type: c4 # must be c4 or synthetic
+dataset_type: pile # must be c4 or synthetic
 
 # Setting for grain
 grain_worker_count: 4
