@@ -40,7 +40,7 @@ load_full_state_path: ""
 # problems with the checkpointer we recommend trying the synchronous one.
 enable_checkpointing: True
 async_checkpointing: True
-checkpoint_period: 50
+checkpoint_period: 1000
 
 force_unroll: False # during generate_param_only_checkpoint should we unroll the loop?
 ############################### END CHECKPOINTING ##################################
@@ -75,7 +75,7 @@ base_num_decoder_layers: 24
 # lsp pax
 window_size: [256, null] # null or list. ex: [256, null]
 num_layers_per_block: 2 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
-query_chunk_size: null # null or int.
+query_chunk_size: 128 # null or int.
 max_target_length: 2049 # Maximum sequence length
 reset_for_eval: True # True will rest eval dataset
 epoch: 1
@@ -85,9 +85,9 @@ training_num_batches_to_skip: null # skip data , null or int
 zero_loss: True # whether to compute id zero loss when train
 iter_file_nums: 2 # how many files every file batch
 use_static_w: False
-per_device_batch_size: 64.0
-eval_loop_num_batches: 10
-eval_interval: 50  # the specific number of train step between eval_step
+per_device_batch_size: 32.0
+eval_loop_num_batches: 162
+eval_interval: 500  # the specific number of train step between eval_step
  
 head_dim: 128
 # mixture of experts (moe)
