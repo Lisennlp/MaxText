@@ -477,8 +477,10 @@ def train_loop(config, state=None):
           eval_batch = next(eval_data_iterator)
           with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
             eval_metrics = p_eval_step(state, eval_batch, nextrng)
-          cumulative_eval_metrics['total_loss'] += float(eval_metrics['scalar']['evaluation/total_loss'])
+            _eval_loss = float(eval_metrics['scalar']['evaluation/total_loss'])
+          cumulative_eval_metrics['total_loss'] += _eval_loss
           cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
+          print(f'edx: {edx}, _eval_loss: {_eval_loss:.3f}')
           # lsp
         except Exception as e:
           # eval_data_iterator = eval_data_iterator.reset()
