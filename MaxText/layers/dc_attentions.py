@@ -1239,7 +1239,8 @@ class Attention(nn.Module):
       value = self.kv_projection(inputs_kv, proj_name='value')
 
     # lsp qk norm
-    if self.qk_norm:
+    if self.config.qk_norm:
+      print(f'qk norm......')
       query = RMSNorm()(query)
       key = RMSNorm()(key)
 
