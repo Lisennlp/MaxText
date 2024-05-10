@@ -40,7 +40,7 @@ load_full_state_path: ""
 # problems with the checkpointer we recommend trying the synchronous one.
 enable_checkpointing: True
 async_checkpointing: True
-checkpoint_period: 1000
+checkpoint_period: 50
 
 force_unroll: False # during generate_param_only_checkpoint should we unroll the loop?
 ############################### END CHECKPOINTING ##################################
@@ -76,15 +76,17 @@ base_num_decoder_layers: 24
 window_size: [256, null] # null or list. ex: [256, null]
 num_layers_per_block: 2 # it must equal to widow_size list length, ex: window_size = [256, null], num_layers_per_block = 2
 query_chunk_size: null # null or int.
-max_target_length: 4097 # Maximum sequence length
+max_target_length: 2049 # Maximum sequence length
 reset_for_eval: True # True will rest eval dataset
 epoch: 1
 train_shuffle_buffer_size: null # null or int
 eval_shuffle_buffer_size: null # null or int
 training_num_batches_to_skip: null # skip data , null or int
-zero_loss: False # whether to compute id zero   when eval data
+zero_loss: True # whether to compute id zero loss when train
 iter_file_nums: 2 # how many files every file batch
 eval_loop_num_batches: 100
+use_static_w: False
+per_device_batch_size: 64.0
  
 head_dim: 128
 # mixture of experts (moe)
@@ -172,7 +174,6 @@ tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
 eval_split: 'val_with_eos'
-per_device_batch_size: 4.0
 # eval_per_device_batch_size: 4.0 # eval also use per_device_batch_size
 max_corpus_chars: 10_000_000
 dataset_type: pile # must be c4 or synthetic

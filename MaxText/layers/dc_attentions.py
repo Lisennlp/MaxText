@@ -37,6 +37,7 @@ from layers import embeddings
 from layers import initializers
 from layers import linears
 from layers import quantizations
+from einops import rearrange, repeat  # XD
 
 
 Dtype = Any
@@ -203,11 +204,12 @@ class DynamicWeightProjection(nn.Module):
   
     if self.dynamic_d_init is not None:
       self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits), quant=self.quant,
-        kernel_init=NormalInitializer(self.dynamic_d_init),
+        kernel_init=NormalInitializer(self.dynamic_d_init), kernel_axes=('embed', None, 'mlp'),
          **kwargs
         )
 
     self.dw_activation = nn.tanh
+    # RMSNormScale, compare to RMSNorm. it remove scale
     self.dw1_norm = nn.RMSNorm(use_scale=False, **{k: v for k, v in kwargs.items() if k not in ['use_bias', 'precision']})
 
     if self.dynamic_dropout_rate is not None:
@@ -268,13 +270,11 @@ class CrossHeadProjection(nn.Module):
   loop_over_dynamic_hd: bool = True
   tgt_dependent: bool = True
   src_dependent: bool = True
-  keep_static_w_in_call: int = 1 # 
   input_activation_cls: Optional[str] = None
   use_input_bias: bool = True
   left_mul: bool = False
   init: Optional[str] = None
   residual: bool = True
-  absorb_residual: bool = False
   query_input_dim: int = None # medium: 1024
   key_input_dim: int = None # medium: 1024
   dynamic_w_hidden_dim: int = None # medium: 64
@@ -323,34 +323,36 @@ class CrossHeadProjection(nn.Module):
     # self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
 
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
-    theta = self.theta
-    shape = inputs.shape
+    shape = inputs.shape  #  (16, 16, 4097, 4097)
     print(f'inputs.shape: {inputs.shape} self.num_heads: {self.num_heads}')
     assert inputs.shape[1] == self.num_heads
+
     inputs = rearrange(inputs, 'B (G M) T S -> B G M T S', G=self.num_groups)
     inputs_label = 'BGMTS'
+    out_label = inputs_label.replace('M', 'N') #  BGNTS
+    exp = f'{inputs_label},GMN->{out_label}' #  'BGMTS'  GMN   BGNTS
+
     ret = inputs
+
     # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
     # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
     if self.use_static_w:
       if self.squeeze_ratio is None: # None
-        w = theta.w * self.keep_static_w_in_call + jnp.eye(self.num_heads_per_group) \
-          if self.residual and self.absorb_residual else theta.w * self.keep_static_w_in_call
+        w = self.w
         _inputs = inputs
         if self.input_activation_cls is not None: # None
-          if self.use_input_bias: _inputs += theta.ib if self.transpose else jnp.expand_dims(theta.ib, axis=(2, 3))
+          if self.use_input_bias: _inputs += self.ib if self.transpose else jnp.expand_dims(self.ib, axis=(2, 3))
           _inputs = self.input_activation(_inputs)
-
+        print(f'ret: {ret.shape} _inputs: {_inputs.shape} w: {w.shape}')
         ret += jnp.einsum(exp, _inputs, w) if not self.left_mul else jnp.einsum(exp, w, _inputs)
       else:
-        hidden = jnp.einsum(exp, inputs, theta.w1) if not self.left_mul else jnp.einsum(exp, theta.w1, inputs)
+        hidden = jnp.einsum(exp, inputs, self.w1) if not self.left_mul else jnp.einsum(exp, self.w1, inputs)
         if self.squeeze_gate_activation_cls is not None:
-          hidden = hidden * self.gate_activation(jnp.einsum(exp, inputs, theta.w1g))
+          hidden = hidden * self.gate_activation(jnp.einsum(exp, inputs, self.w1g))
         else:
           hidden = self.activation(hidden)
-        ret += jnp.einsum(exp, hidden, theta.w2) if not self.left_mul else jnp.einsum(exp, theta.w2, ret)
-      self.add_summaries('out', ret)
-
+        ret += jnp.einsum(exp, hidden, self.w2) if not self.left_mul else jnp.einsum(exp, self.w2, ret)
+    print(f'ret: {ret.shape}')
 
     if qw1 is not None:
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
@@ -413,7 +415,7 @@ class AttentionOp(nn.Module):
   deterministic: bool = False
   window_size: int = None
   query_chunk_size: int = None
-  use_static_w: bool = False
+  use_static_w: bool = True
 
   def setup(self):
     input_dim = self.num_query_heads * self.head_dim
@@ -1296,7 +1298,8 @@ class Attention(nn.Module):
                                head_dim=value.shape[-1],
                                query_chunk_size=query_chunk_size,
                                window_size=self.window_size,
-                               deterministic=deterministic)
+                               deterministic=deterministic,
+                               use_static_w=self.config.use_static_w)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
     # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
