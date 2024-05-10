@@ -42,4 +42,4 @@ gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="
 export TPU_PREFIX=llm-jax-v3-8-10
 export ZONE=us-central1-a
 RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext0419'
-python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME
+python MaxText/train.py MaxText/configs/dcformer.yml run_name=$RUN_NAME

@@ -214,7 +214,7 @@ profiler_steps: 5
 
 # When dropout is false the model is a deterministic function of the
 # data_shuffle_seed and init_weights_seed (i.e. reproducible losses)
-enable_dropout: True
+enable_dropout: False
 enable_data_shuffling: True
 data_shuffle_seed: 0
 init_weights_seed: 0
