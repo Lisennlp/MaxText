@@ -188,7 +188,7 @@ class DynamicWeightProjection(nn.Module):
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
-      self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,
+      self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,  # 0.00014
         kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
         # kernel_axes=('fsdp', 'data', None, 'tensor'),
@@ -258,9 +258,9 @@ class DynamicWeightProjection(nn.Module):
 
 class CrossHeadProjection(nn.Module):
   dtype: Optional[Dtype] = None
-  param_dtype: Dtype = jnp.bfloat16
+  param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-
+  squeeze_ratio: float = None
   num_heads: int = 0
   num_groups: int = 0
   relative_scale: float = 0.1
@@ -268,6 +268,16 @@ class CrossHeadProjection(nn.Module):
   loop_over_dynamic_hd: bool = True
   tgt_dependent: bool = True
   src_dependent: bool = True
+  keep_static_w_in_call: int = 1 # 
+  input_activation_cls: Optional[str] = None
+  use_input_bias: bool = True
+  left_mul: bool = False
+  init: Optional[str] = None
+  residual: bool = True
+  absorb_residual: bool = False
+  query_input_dim: int = None # medium: 1024
+  key_input_dim: int = None # medium: 1024
+  dynamic_w_hidden_dim: int = None # medium: 64
 
   def setup(self) -> None:
     self.num_heads_per_group = self.num_heads // self.num_groups
@@ -277,10 +287,43 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
+
+    def init_fn(out_dim, in_dim=None):
+      if self.init is not None: 
+        return self.init
+      if in_dim is None: 
+        in_dim = self.num_heads_per_group
+      if not self.residual or in_dim == self.num_heads_per_group and in_dim > out_dim: # ffn.w1
+        relative_scale = 1.0
+      elif in_dim in [self.query_input_dim, self.key_input_dim] and \
+        self.dynamic_w_hidden_dim and out_dim in [self.dynamic_w_hidden_dim, self.dynamic_w_hidden_dim * 2]:
+        relative_scale = 1.
+      elif out_dim == self.num_heads_per_group and in_dim <= out_dim:  # ffn.w2 or w
+        relative_scale = 0.1
+      else:
+        assert False, f'[{in_dim}, {out_dim}]'
+      return math.sqrt(2.0 / (in_dim + out_dim)) * relative_scale
+
+    if self.use_static_w:
+      if self.squeeze_ratio is None:
+        shape=[self.num_groups, self.num_heads_per_group, self.num_heads_per_group]
+        scale = init_fn(self.num_heads_per_group)
+        self.w = self.param('w', NormalInitializer(scale), shape, self.param_dtype)
+      else:
+        self.hidden_dim = self.num_heads_per_group // self.squeeze_ratio
+        shape=[self.num_groups, self.num_heads_per_group, self.hidden_dim]
+        scale = init_fn(self.hidden_dim)
+        self.w1 = self.param('w1', NormalInitializer(scale), shape, self.param_dtype)
+
+        shape=[self.num_groups, self.hidden_dim, self.num_heads_per_group]
+        scale = init_fn(self.num_heads_per_group, in_dim=self.hidden_dim)
+        self.w1 = self.param('w2', NormalInitializer(scale), shape, self.param_dtype)
+
     # shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
     # self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
 
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
+    theta = self.theta
     shape = inputs.shape
     print(f'inputs.shape: {inputs.shape} self.num_heads: {self.num_heads}')
     assert inputs.shape[1] == self.num_heads
@@ -289,6 +332,26 @@ class CrossHeadProjection(nn.Module):
     ret = inputs
     # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
     # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
+    if self.use_static_w:
+      if self.squeeze_ratio is None: # None
+        w = theta.w * self.keep_static_w_in_call + jnp.eye(self.num_heads_per_group) \
+          if self.residual and self.absorb_residual else theta.w * self.keep_static_w_in_call
+        _inputs = inputs
+        if self.input_activation_cls is not None: # None
+          if self.use_input_bias: _inputs += theta.ib if self.transpose else jnp.expand_dims(theta.ib, axis=(2, 3))
+          _inputs = self.input_activation(_inputs)
+
+        ret += jnp.einsum(exp, _inputs, w) if not self.left_mul else jnp.einsum(exp, w, _inputs)
+      else:
+        hidden = jnp.einsum(exp, inputs, theta.w1) if not self.left_mul else jnp.einsum(exp, theta.w1, inputs)
+        if self.squeeze_gate_activation_cls is not None:
+          hidden = hidden * self.gate_activation(jnp.einsum(exp, inputs, theta.w1g))
+        else:
+          hidden = self.activation(hidden)
+        ret += jnp.einsum(exp, hidden, theta.w2) if not self.left_mul else jnp.einsum(exp, theta.w2, ret)
+      self.add_summaries('out', ret)
+
+
     if qw1 is not None:
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
       for sym, (w1, w2) in zip(['T', 'S'], [(qw1, qw2), (kw1, kw2)]):
@@ -340,7 +403,7 @@ class AttentionOp(nn.Module):
   dtype: DType = jnp.float32
   quant: Optional[Quant] = None
   # lsp
-  dynamic_compose: bool = True
+  # dynamic_compose: bool = True
   is_cross_attention: bool = False
   dynamic_dropout_rate: float = None
   precision: PrecisionLike = None
@@ -350,31 +413,18 @@ class AttentionOp(nn.Module):
   deterministic: bool = False
   window_size: int = None
   query_chunk_size: int = None
+  use_static_w: bool = False
 
   def setup(self):
-    if self.dynamic_compose:
-      input_dim = self.num_query_heads * self.head_dim
-      I = 2
-      num_heads_per_group = self.num_query_heads // self.num_groups
-      dynamic_w_hidden_dim = num_heads_per_group * I * 2
-      if self.is_cross_attention:
-        for name in ['q_dyn_w_proj', 'k_dyn_w_proj']:
-          setattr(self, name, DynamicWeightProjection(
-            num_heads=self.num_query_heads, num_groups=self.num_groups,
-            input_dim=self.num_query_heads * self.head_dim, n_splits=2,
-            dynamic_w_init=math.sqrt(1 / dynamic_w_hidden_dim) * 2 / (num_heads_per_group + I) * 0.01,
-            dynamic_d_init=math.sqrt(2 / (input_dim + num_heads_per_group)) * 0.005,
-            dynamic_squeeze_ratio=num_heads_per_group // I,
-            dynamic_w_hidden_dim=dynamic_w_hidden_dim,
-            dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
-            deterministic=self.deterministic,
-            dynamic_dropout_rate=self.dynamic_dropout_rate,
-            quant=self.quant,
-          ))
-      else:
-        self.dyn_w_proj = DynamicWeightProjection(
+    input_dim = self.num_query_heads * self.head_dim
+    I = 2
+    num_heads_per_group = self.num_query_heads // self.num_groups
+    dynamic_w_hidden_dim = num_heads_per_group * I * 2
+    if self.is_cross_attention:
+      for name in ['q_dyn_w_proj', 'k_dyn_w_proj']:
+        setattr(self, name, DynamicWeightProjection(
           num_heads=self.num_query_heads, num_groups=self.num_groups,
-          input_dim=self.num_query_heads * self.head_dim, n_splits=4,
+          input_dim=self.num_query_heads * self.head_dim, n_splits=2,
           dynamic_w_init=math.sqrt(1 / dynamic_w_hidden_dim) * 2 / (num_heads_per_group + I) * 0.01,
           dynamic_d_init=math.sqrt(2 / (input_dim + num_heads_per_group)) * 0.005,
           dynamic_squeeze_ratio=num_heads_per_group // I,
@@ -383,12 +433,33 @@ class AttentionOp(nn.Module):
           deterministic=self.deterministic,
           dynamic_dropout_rate=self.dynamic_dropout_rate,
           quant=self.quant,
-        )
-      for name in ['pre_proj', 'post_proj']:
-        setattr(self, name, CrossHeadProjection(
-          num_heads=self.num_query_heads, num_groups=self.num_groups,
-          dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
         ))
+    else:
+      self.dyn_w_proj = DynamicWeightProjection(
+        num_heads=self.num_query_heads, num_groups=self.num_groups,
+        input_dim=self.num_query_heads * self.head_dim, n_splits=4,
+        dynamic_w_init=math.sqrt(1 / dynamic_w_hidden_dim) * 2 / (num_heads_per_group + I) * 0.01,
+        dynamic_d_init=math.sqrt(2 / (input_dim + num_heads_per_group)) * 0.005,
+        dynamic_squeeze_ratio=num_heads_per_group // I,
+        dynamic_w_hidden_dim=dynamic_w_hidden_dim,
+        dtype=self.dtype, param_dtype=self.param_dtype, precision=self.precision,
+        deterministic=self.deterministic,
+        dynamic_dropout_rate=self.dynamic_dropout_rate,
+        quant=self.quant,
+      )
+
+    for name in ['pre_proj', 'post_proj']:
+      setattr(self, name, CrossHeadProjection(
+                                dtype=self.dtype, 
+                                param_dtype=self.param_dtype, 
+                                precision=self.precision,
+                                num_heads=self.num_query_heads, 
+                                num_groups=self.num_groups,
+                                use_static_w=self.use_static_w,
+                                query_input_dim=input_dim,
+                                key_input_dim=input_dim,
+                                dynamic_w_hidden_dim=dynamic_w_hidden_dim,
+      ))
 
   def check_attention_inputs(
     self,
