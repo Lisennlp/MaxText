@@ -184,7 +184,7 @@ grain_worker_count: 4
 
 # Training loop
 steps: 10000000 # If set to -1 then will inherit value from learning_rate_schedule_steps
-log_period: 100 # Flushes Tensorboard
+log_period: 10 # Flushes Tensorboard
 
 # We take inspiration from Llama2's learning rate (LR) schedule, see https://arxiv.org/pdf/2307.09288.pdf section 2.2
 # Learning rate schedule has either two or three parts:
