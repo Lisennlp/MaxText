@@ -84,10 +84,10 @@ eval_shuffle_buffer_size: null # null or int
 training_num_batches_to_skip: null # skip data , null or int
 zero_loss: True # whether to compute id zero loss when train
 iter_file_nums: 2 # how many files every file batch
-use_static_w: False
-per_device_batch_size: 32.0
+use_static_w: True
+per_device_batch_size: 8.0
 eval_loop_num_batches: 162
-eval_interval: 500  # the specific number of train step between eval_step
+eval_interval: 50  # the specific number of train step between eval_step
  
 head_dim: 128
 # mixture of experts (moe)

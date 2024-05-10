@@ -38,6 +38,9 @@ from layers import initializers
 from layers import linears
 from layers import quantizations
 from einops import rearrange, repeat  # XD
+from layers import normalizations
+
+RMSNorm = normalizations.RMSNorm
 
 
 Dtype = Any
@@ -745,7 +748,7 @@ class AttentionOp(nn.Module):
     else:
       w = self.query_chunk_size
       print(f'qlen: {t} w: {w}')
-      # assert t % w == 0, f'{t} % {w} != 0'
+      assert t % w == 0, f'{t} % {w} != 0'
       encoded = jnp.zeros((b, t, n, h), dtype=value.dtype)
       for i in range(t // w):
         start, stop = i * w, (i + 1) * w
@@ -1234,6 +1237,11 @@ class Attention(nn.Module):
       query = self.query_projection(inputs_q)
       key = self.kv_projection(inputs_kv, proj_name='key')
       value = self.kv_projection(inputs_kv, proj_name='value')
+
+    # lsp qk norm
+    if self.qk_norm:
+      query = RMSNorm()(query)
+      key = RMSNorm()(key)
 
     # apply ROPE
     query = RotaryEmbedding(
