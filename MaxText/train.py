@@ -58,7 +58,7 @@ from cloud_tpu_diagnostics.configuration import stack_trace_configuration
 
 from layers import quantizations
 from absl import logging
-import copy
+
 
 Transformer = models.Transformer
 EPS = 1e-8
@@ -469,12 +469,12 @@ def train_loop(config, state=None):
     write_metrics(writer, local_metrics_file, running_gcs_metrics, metrics, step, config)
 
     if config.eval_interval > 0 and step > start_step and step % config.eval_interval == 0:
-      copy_eval_data_iterator = copy.deepcopy(eval_data_iterator)
-      assert copy_eval_data_iterator
+      eval_data_iterator.reset()
+      assert eval_data_iterator
       cumulative_eval_metrics = {"total_loss": 0., "total_weights": 0.}
       for edx in range(config.eval_loop_num_batches):
         try:
-          eval_batch = next(copy_eval_data_iterator)
+          eval_batch = next(eval_data_iterator)
           with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
             eval_metrics = p_eval_step(state, eval_batch, nextrng)
           cumulative_eval_metrics['total_loss'] += float(eval_metrics['scalar']['evaluation/total_loss'])
