@@ -188,7 +188,7 @@ class DynamicWeightProjection(nn.Module):
     if self.dynamic_w_init is not None:
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
-      print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
+      print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim} dynamic_dropout_rate: {self.dynamic_dropout_rate}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,  # 0.00014
         kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
@@ -216,7 +216,6 @@ class DynamicWeightProjection(nn.Module):
       self.dropout = nn.Dropout(self.dynamic_dropout_rate)
 
   def __call__(self, query_vec):
-    print(f'dynamic_dropout_rate: {self.dynamic_dropout_rate}')
     if self.n_splits == 2:
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))   # BTG2,64
       if self.dynamic_dropout_rate is not None:
@@ -238,8 +237,6 @@ class DynamicWeightProjection(nn.Module):
       # dw_hidden = jnp.einsum('BTD,DGCK->BTGCK', query_vec, theta.dw1)  # C=4 [pre,post]*[query,key]
       # w1, w2 = jnp.split(jnp.einsum('BTGCK,GCKIM->BTGCIM', dw_hidden, theta.qkw), 2, axis=-2)
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))
-      print(f'dw_hidden: {dw_hidden.dtype}')
-      print(f'dynamic_dropout_rate: {self.dynamic_dropout_rate}')
       if self.dynamic_dropout_rate is not None:
         dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)  # XD may add
       # w1, w2 = jnp.split(self.qkw(dw_hidden), 2, axis=-2)
@@ -287,6 +284,7 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
+    print(f'num_heads: {self.num_heads} num_heads_per_group: {self.num_heads_per_group} use_static_w: {self.use_static_w}')
 
     def init_fn(out_dim, in_dim=None):
       if self.init is not None: 
@@ -324,7 +322,6 @@ class CrossHeadProjection(nn.Module):
 
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
     shape = inputs.shape  #  (16, 16, 4097, 4097)
-    print(f'inputs.shape: {inputs.shape} self.num_heads: {self.num_heads}')
     assert inputs.shape[1] == self.num_heads
 
     inputs = rearrange(inputs, 'B (G M) T S -> B G M T S', G=self.num_groups)
@@ -343,7 +340,6 @@ class CrossHeadProjection(nn.Module):
         if self.input_activation_cls is not None: # None
           if self.use_input_bias: _inputs += self.ib if self.transpose else jnp.expand_dims(self.ib, axis=(2, 3))
           _inputs = self.input_activation(_inputs)
-        print(f'ret: {ret.shape} _inputs: {_inputs.shape} w: {w.shape}')
         ret += jnp.einsum(exp, _inputs, w) if not self.left_mul else jnp.einsum(exp, w, _inputs)
       else:
         hidden = jnp.einsum(exp, inputs, self.w1) if not self.left_mul else jnp.einsum(exp, self.w1, inputs)
@@ -352,7 +348,6 @@ class CrossHeadProjection(nn.Module):
         else:
           hidden = self.activation(hidden)
         ret += jnp.einsum(exp, hidden, self.w2) if not self.left_mul else jnp.einsum(exp, self.w2, ret)
-    print(f'ret: {ret.shape}')
 
     if qw1 is not None:
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
@@ -561,8 +556,6 @@ class AttentionOp(nn.Module):
     segment_axis_names = nn.logical_to_mesh_axes(
         (BATCH, 'activation_length_no_heads')
     )
-    print(f'axis_names: {axis_names}')
-    print(f'segment_axis_names: {segment_axis_names}')
 
     @functools.partial(
         shard_map,
@@ -736,10 +729,8 @@ class AttentionOp(nn.Module):
     attn_mask = _compute_slide_attn_mask(self.query_chunk_size, self.window_size, t, query.dtype)
 
     if hasattr(self, 'dyn_w_proj'):
-        print(f'run dyn_w_proj')
         pre_proj_dw_args, post_proj_dw_args = self.dyn_w_proj(query_vec)
     else:
-        print(f'run dyn_w_pre_proj  dyn_w_post_proj')
         if hasattr(self, 'dyn_w_pre_proj'):
           pre_proj_dw_args = self.dyn_w_pre_proj(query_vec)
         if hasattr(self, 'dyn_w_post_proj'):
@@ -790,50 +781,28 @@ class AttentionOp(nn.Module):
     if self.float32_qk_product:
       query = query.astype(jnp.float32)
       key = key.astype(jnp.float32)
-    print(f'query: {query.dtype}')
-    print(f'key: {key.dtype}')
     # bnts
     attn_weights = self.qk_product(query, key)
-    print(f'attn_weights: {attn_weights.dtype}')
     # 5维
     # attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
     # attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
-
-    # if self.is_cross_attention:
-    #     (pre_qw1, pre_qw2, pre_qdd), (post_qw1, post_qw2, post_qdd) = self.q_dyn_w_proj(inputs_q)
-    #     (pre_kw1, pre_kw2, pre_kdd), (post_kw1, post_kw2, post_kdd) = self.k_dyn_w_proj(inputs_kv)
-    # else:
-    #   (pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd), \
-    #   (post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd) = self.dyn_w_proj(inputs_q)
-
     pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd = pre_proj_dw_args
     post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd = post_proj_dw_args
 
-    # print(f'attn_weights: {attn_weights.shape} pre_qw1: {pre_qw1.shape} pre_qw2: {pre_qw2.shape} pre_kw1: {pre_kw1.shape} pre_kw2: {pre_kw2.shape} pre_qdd: {pre_qdd.shape} pre_kdd: {pre_kdd.shape}')
     attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
     # apply attention mask
-    print(f'attn_weights11: {attn_weights.dtype}')
     if attn_mask is not None:
       attn_weights = apply_mask_to_logits(attn_weights, attn_mask)
     
     if self.float32_logits:
           attn_weights = attn_weights.astype(jnp.float32)
     # normalize the attention weights
-    print(f'attn_weights222: {attn_weights.dtype}')
     probs = jax.nn.softmax(attn_weights).astype(self.dtype)
-    print(f'probs: {probs.dtype}')
-    # print(f'probs post: {probs.shape} post_qw1: {post_qw1.shape} post_qw2: {post_qw2.shape} post_kw1: {post_kw1.shape} post_kw2: {post_kw2.shape} post_qdd: {post_qdd.shape} post_kdd: {post_kdd.shape}')
     probs = self.post_proj(probs, post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
-    
-    print(f'probs111: {probs.dtype}')
     # Casting softmaxt computation for float32 for model stability.
     probs = probs.astype(value.dtype)
-
-    print(f'probs222: {probs.dtype}')
     if attn_mask is not None:
       probs = jnp.where((attn_mask >= DEFAULT_MASK_VALUE * 0.5), probs, 0.)
-
-    print(f'probs333: {probs.dtype}')
     output = jnp.einsum('bnts,bsnh->btnh', probs, value)
     return output
 
@@ -1109,7 +1078,6 @@ class AttentionOp(nn.Module):
       inputs_q=inputs_q,
       inputs_kv=inputs_kv,
     )
-    print(f'attn_out: {attn_out.shape}')
     return attn_out
 
 

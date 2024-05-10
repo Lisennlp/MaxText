@@ -468,24 +468,20 @@ def train_loop(config, state=None):
     write_metrics(writer, local_metrics_file, running_gcs_metrics, metrics, step, config)
 
     if config.eval_interval > 0 and step > start_step and step % config.eval_interval == 0:
+      eval_data_iterator = eval_data_iterator.reset()
       assert eval_data_iterator
       cumulative_eval_metrics = {"total_loss": 0., "total_weights": 0.}
-      try:
-        for eval_batch in eval_data_iterator:
+      for edx in range(config.eval_loop_num_batches):
+        try:
+          eval_batch = next(eval_data_iterator)
           with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
-            eval_metrics = p_eval_step(
-              state, eval_batch, nextrng
-            )
-          
+            eval_metrics = p_eval_step(state, eval_batch, nextrng)
           cumulative_eval_metrics['total_loss'] += float(eval_metrics['scalar']['evaluation/total_loss'])
           cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
           # lsp
-          eval_loop_num_batches += 1
-          if eval_loop_num_batches % config.eval_loop_num_batches == 0:
-            break
-      except Exception as e:
-        eval_data_iterator = eval_data_iterator.reset()
-        print(f'Reset to new eval dataloadr')
+        except Exception as e:
+          # eval_data_iterator = eval_data_iterator.reset()
+          print(f'error: {e}')
 
       eval_loss = cumulative_eval_metrics['total_loss'] / (cumulative_eval_metrics['total_weights'] + EPS)
       max_logging.log(f"average loss after {step=}: {eval_loss=}, total_weights={cumulative_eval_metrics['total_weights']}")
