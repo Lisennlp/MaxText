@@ -113,7 +113,7 @@ class DenseGeneral(nn.Module):
     features = _canonicalize_tuple(self.features)
     axis = _canonicalize_tuple(self.axis) # -1 -> (-1, )
     # bf16
-    logging.info(f'inputs: {inputs.shape} dtype: {self.dtype} param_dtype: {self.param_dtype}')
+    logging.info(f'inputs: {inputs.shape} dtype: {self.dtype}')
     
     inputs = jnp.asarray(inputs, self.dtype)
     # bsz * length * head_nums * head_dim

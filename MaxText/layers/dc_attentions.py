@@ -189,7 +189,7 @@ class DynamicWeightProjection(nn.Module):
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,
-        kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim)), 'fan_in', 'normal'), 
+        kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
         # kernel_axes=('fsdp', 'data', None, 'tensor'),
         **kwargs)
