@@ -36,7 +36,6 @@ default_embed_init = nn.initializers.variance_scaling(
 )
 
 default_bias_init = jax.nn.initializers.constant(0.0)
-normal = nn.initializers.normal
 
 def nd_dense_init(scale, mode, distribution):
   """Initializer with in_axis, out_axis set at call time."""
@@ -45,6 +44,14 @@ def nd_dense_init(scale, mode, distribution):
     fn = jax.nn.initializers.variance_scaling(
         scale, mode, distribution, in_axis, out_axis
     )
+    return fn(key, shape, dtype)
+
+  return init_fn
+
+
+def nd_dense_init_normal(scale):
+  def init_fn(key, shape, dtype, in_axis=None, out_axis=None):
+    fn = nn.initializers.normal(scale)
     return fn(key, shape, dtype)
 
   return init_fn

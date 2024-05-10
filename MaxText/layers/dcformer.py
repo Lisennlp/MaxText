@@ -44,6 +44,14 @@ Attention = dc_attentions.Attention
 RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
 
+
+
+from layers import initializers
+
+NormalInitializer = initializers.nd_dense_init_normal
+
+
+
 #-----------------------------------------
 # The Decoder Layer specific for Dcformer
 #-----------------------------------------
@@ -130,7 +138,9 @@ class DcformerDecoderLayer(nn.Module):
       float32_qk_product = False,  # computes logits in float32 for stability.
       float32_logits = True,
       quant=self.quant,
-      window_size=window_size)
+      window_size=window_size,
+      kernel_init=NormalInitializer(0.006),
+      )
 
     attention_lnx = attention_layer(
             lnx,
@@ -161,6 +171,7 @@ class DcformerDecoderLayer(nn.Module):
         name=f'mlp_{block_index}',
         config=cfg,
         quant=self.quant,
+        kernel_init=NormalInitializer(0.006),
     )(hidden_states, deterministic=deterministic)
     mlp_lnx = nn.with_logical_constraint(
         mlp_lnx, ('activation_batch', 'activation_length', 'activation_embed')

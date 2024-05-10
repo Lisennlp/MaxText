@@ -39,8 +39,6 @@ from layers import linears
 from layers import quantizations
 
 
-
-
 Dtype = Any
 
 
@@ -54,7 +52,8 @@ DenseGeneral = linears.DenseGeneral
 RotaryEmbedding = embeddings.RotaryEmbedding
 NdInitializer = initializers.NdInitializer
 Quant = quantizations.AqtQuantization
-NormalInitializer = initializers.normal
+
+NormalInitializer = initializers.nd_dense_init_normal
 
 AxisNames = common_types.AxisNames
 BATCH = common_types.BATCH
@@ -64,6 +63,7 @@ D_KV = common_types.D_KV
 DEFAULT_MASK_VALUE = -0.7 * float(jnp.finfo(jnp.dtype("float32")).max)
 
 nd_dense_init = initializers.nd_dense_init
+
 shard_map = shard_map.shard_map
 
 dynamic_vector_slice_in_dim = jax.vmap(
@@ -189,7 +189,7 @@ class DynamicWeightProjection(nn.Module):
         if self.dynamic_squeeze_ratio is not None else 2
       print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,
-        kernel_init=nd_dense_init(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim)), 'fan_in', 'normal'), 
+        kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim)), 'fan_in', 'normal'), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
         # kernel_axes=('fsdp', 'data', None, 'tensor'),
         **kwargs)
@@ -199,12 +199,11 @@ class DynamicWeightProjection(nn.Module):
       I = dynamic_hidden_dim * 2
       shape = [G, self.n_splits, K, I, M]
       kernel_init_shard = nn.with_logical_partitioning(NormalInitializer(self.dynamic_w_init), (None, 'data', 'fsdp', None, 'tensor'))
-            # self.qkw = self.param('qkw', nn.flax.linen.initializers.normal(self.dynamic_w_init), shape, self.param_dtype)
       self.qkw = self.param('qkw',kernel_init_shard, shape, self.param_dtype)
   
     if self.dynamic_d_init is not None:
       self.dd = DenseGeneral(features=(self.num_groups, self.num_heads_per_group * self.n_splits), quant=self.quant,
-        # kernel_init=NormalInitializer(self.dynamic_d_init),
+        kernel_init=NormalInitializer(self.dynamic_d_init),
          **kwargs
         )
 
@@ -278,8 +277,8 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
-    shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
-    self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
+    # shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
+    # self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
 
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
     shape = inputs.shape
@@ -1086,19 +1085,10 @@ class Attention(nn.Module):
 
   def query_projection(self, inputs_q: Array) -> Array:
     """Query projection."""
-
-    # NOTE: T5 does not explicitly rescale the attention logits by
-    #       1/sqrt(depth_kq)!  This is folded into the initializers of the
-    #       linear transformations, which is equivalent under Adafactor.
-    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
-    def query_init(*args):
-      #pylint: disable=no-value-for-parameter
-      return self.kernel_init(*args) / depth_scaling
-
     query_proj = DenseGeneral(
       features=(self.num_query_heads, self.head_dim),
       axis=-1,
-      kernel_init=query_init,
+      kernel_init=self.kernel_init, # lsp
       kernel_axes=('embed', 'heads', 'kv'), # fsdp, mdl, None
       dtype=self.dtype,
       name='query',
@@ -1125,7 +1115,7 @@ class Attention(nn.Module):
     kv_proj = DenseGeneral(
         features=(self.num_kv_heads, self.head_dim),
         axis=-1,
-        kernel_init=self.kernel_init,
+        kernel_init=self.kernel_init, # lsp
         kernel_axes=('embed', 'heads', 'kv'),
         dtype=self.dtype,
         name=proj_name,
@@ -1138,7 +1128,7 @@ class Attention(nn.Module):
     qkv_proj = DenseGeneral(
       features=(3, self.num_query_heads, self.head_dim),
       axis = -1,
-      kernel_init=self.kernel_init,
+      kernel_init=self.kernel_init, # lsp
         kernel_axes=('embed', 'qkv', 'heads', 'kv'),
         dtype=self.dtype,
         name=proj_name,
@@ -1150,7 +1140,7 @@ class Attention(nn.Module):
     out_proj = DenseGeneral(
       features=output_dim,
       axis=(-2, -1),
-      kernel_init=self.kernel_init,
+      kernel_init=self.kernel_init, # lsp
       kernel_axes=('heads', 'kv', 'embed'),
       dtype=self.dtype,
       name='out',
