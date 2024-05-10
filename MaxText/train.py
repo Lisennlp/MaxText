@@ -399,7 +399,7 @@ def train_loop(config, state=None):
     )
 
   num_model_parameters = max_utils.calculate_num_params_from_pytree(state.params)
-  max_logging.log(f"number parameters: {num_model_parameters/10**9:.3f} billion")
+  max_logging.log(f"number parameters: {num_model_parameters/10**9:.5f} billion")
   per_device_tflops = calculate_training_tflops(num_model_parameters, config)
 
   # Write train config params, num model params, and XLA flags to tensorboard
@@ -480,7 +480,8 @@ def train_loop(config, state=None):
             _eval_loss = float(eval_metrics['scalar']['evaluation/total_loss'])
           cumulative_eval_metrics['total_loss'] += _eval_loss
           cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
-          print(f'edx: {edx}, _eval_loss: {_eval_loss:.3f}')
+          mean_eval_loss = _eval_loss / (config.global_batch_size_to_train_on * (config.max_target_length - 1))
+          print(f'edx: {edx}, mean_eval_loss: {mean_eval_loss:.3f}')
           # lsp
         except Exception as e:
           # eval_data_iterator = eval_data_iterator.reset()

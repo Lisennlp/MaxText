@@ -1241,8 +1241,18 @@ class Attention(nn.Module):
     # lsp qk norm
     if self.config.qk_norm:
       print(f'qk norm......')
-      query = RMSNorm()(query)
-      key = RMSNorm()(key)
+      query = RMSNorm(
+        dtype=self.config.dtype,
+        name=f'q_norm',
+        kernel_axes=('embed',),
+        epsilon=self.config.normalization_layer_epsilon,
+        )(query)
+      key = RMSNorm(
+        dtype=self.config.dtype,
+        name=f'k_norm',
+        kernel_axes=('embed',),
+        epsilon=self.config.normalization_layer_epsilon,
+        )(key)
 
     # apply ROPE
     query = RotaryEmbedding(
