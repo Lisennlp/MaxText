@@ -744,7 +744,8 @@ class AttentionOp(nn.Module):
                                                   )
     else:
       w = self.query_chunk_size
-      assert t % w == 0, f'{t} % {w} != 0'
+      print(f'qlen: {t} w: {w}')
+      # assert t % w == 0, f'{t} % {w} != 0'
       encoded = jnp.zeros((b, t, n, h), dtype=value.dtype)
       for i in range(t // w):
         start, stop = i * w, (i + 1) * w

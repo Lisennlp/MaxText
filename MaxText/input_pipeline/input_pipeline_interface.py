@@ -175,6 +175,7 @@ def make_pile_train_iterator(config, mesh, add_bos, add_eos):
   task_features = ['input_ids']
 
   train_dataloader = _pile_data_processing.PileDatasets(
+                            mesh=mesh,
                             name=train_name, 
                             path=train_pathes, 
                             meta_dict=meta_dict,
@@ -192,6 +193,7 @@ def make_pile_train_iterator(config, mesh, add_bos, add_eos):
   eval_dataloader = None
   if eval_pathes:
     eval_dataloader = _pile_data_processing.PileDatasets(
+                            mesh=mesh,
                             name=eval_name, 
                             path=eval_pathes, 
                             meta_dict={},

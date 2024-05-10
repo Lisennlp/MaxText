@@ -7,10 +7,11 @@ from absl import logging
 import tensorflow as tf
 import jax
 from jax import numpy as jnp
-
+import multihost_dataloading
 
 class PileDatasets():
     def __init__(self,
+                mesh: str = None,
                 name: str = 'pile',
                 path: Optional[str] = None,
                 num_infeed_hosts: int = 0,
@@ -29,6 +30,7 @@ class PileDatasets():
                 only_eval: bool = False,
                 zero_loss: bool = True,
                 ):
+        self.mesh = mesh
         self.name = name
         self.path = path
         self.num_infeed_hosts = num_infeed_hosts
@@ -178,6 +180,9 @@ class PileDatasets():
         ds = ds.map(self.convert)
         ds = ds.prefetch(tf.data.AUTOTUNE)
         if self.step_in_file: ds = ds.skip(self.step_in_file)  # XD fix
+
+        ds = multihost_dataloading.MultiHostDataLoadIterator(ds, self.mesh)
+
         return ds
 
     def load_tfrecord_dataset(self, fnames):
@@ -191,7 +196,7 @@ class PileDatasets():
             fname = repeat_fnames[n * self.iter_file_nums : (n + 1) * self.iter_file_nums]
             self.meta_dict["cur_files"] = fname
             ds = self._load_file_dataset(fname)
-            ds = ds.as_numpy_iterator()
+            # ds = ds.as_numpy_iterator()
             for batch in ds:
                 # self.meta_dict["step_in_file"] += 1  # XD fix
                 self.step_in_file += 1
