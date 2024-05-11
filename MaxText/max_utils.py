@@ -342,7 +342,7 @@ def init_initial_state(model, tx, config, is_training, key):
   """
   input_shape = (
       config.global_batch_size_to_load,
-      config.max_target_length
+      config.max_target_length - 1 # lsp:  config.max_target_length = -->> config.max_target_length - 1
   )
   model_vars = model.init({'params': key, 'dropout': key, 'aqt': key},
                           jnp.ones(input_shape, dtype=jnp.int32),
