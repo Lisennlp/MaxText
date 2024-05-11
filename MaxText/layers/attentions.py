@@ -743,15 +743,15 @@ class Attention(nn.Module):
     # NOTE: T5 does not explicitly rescale the attention logits by
     #       1/sqrt(depth_kq)!  This is folded into the initializers of the
     #       linear transformations, which is equivalent under Adafactor.
-    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
-    def query_init(*args):
-      #pylint: disable=no-value-for-parameter
-      return self.kernel_init(*args) / depth_scaling
+    # depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
+    # def query_init(*args):
+    #   #pylint: disable=no-value-for-parameter
+    #   return self.kernel_init(*args) / depth_scaling
 
     query_proj = DenseGeneral(
       features=(self.num_query_heads, self.head_dim),
       axis=-1,
-      kernel_init=query_init,
+      kernel_init=self.kernel_init, # lsp
       kernel_axes=('embed', 'heads', 'kv'), # fsdp, mdl, None
       dtype=self.dtype,
       name='query',
@@ -876,6 +876,9 @@ class Attention(nn.Module):
     key = checkpoint_name(key, 'key_proj')
     value = nn.with_logical_constraint(value, self.value_axis_names)
     value = checkpoint_name(value, 'value_proj')
+
+    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
+    query /= depth_scaling
 
     attention_op = AttentionOp(mesh=self.mesh,
                                attention_kernel=self.attention_kernel,
