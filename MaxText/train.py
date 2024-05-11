@@ -478,9 +478,10 @@ def train_loop(config, state=None):
           with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
             eval_metrics = p_eval_step(state, eval_batch, nextrng)
             _eval_loss = float(eval_metrics['scalar']['evaluation/total_loss'])
+            _weight = float(eval_metrics['scalar']['evaluation/total_weights'])
           cumulative_eval_metrics['total_loss'] += _eval_loss
-          cumulative_eval_metrics['total_weights'] += float(eval_metrics['scalar']['evaluation/total_weights'])
-          mean_eval_loss = _eval_loss / (config.global_batch_size_to_train_on * (config.max_target_length - 1))
+          cumulative_eval_metrics['total_weights'] += _weight
+          mean_eval_loss = _eval_loss / _weight
           print(f'edx: {edx}, mean_eval_loss: {mean_eval_loss:.3f}')
           # lsp
         except Exception as e:
