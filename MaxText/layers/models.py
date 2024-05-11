@@ -29,6 +29,12 @@ from layers import embeddings
 from layers import linears
 from layers import normalizations, quantizations
 
+
+
+from layers import initializers
+
+NormalInitializer = initializers.nd_dense_init_normal
+
 Array = common_types.Array
 Config = common_types.Config
 DType = common_types.DType
@@ -206,12 +212,12 @@ class Decoder(nn.Module):
     if cfg.use_untrainable_positional_embedding:
         y = PositionalEmbedding(cfg.base_emb_dim)(y, decoder_positions)
 
-    if cfg.trainable_position_size > 0:
+    if cfg.trainable_position_size > 0: # false
       y += Embed(
         num_embeddings=cfg.trainable_position_size,
         features=cfg.emb_dim,
         dtype=cfg.dtype,
-        embedding_init=nn.initializers.normal(stddev=0.006), # lsp
+        embedding_init=nn.initializers.normal(stddev=1.0),
         name='position_embedder',
         config=cfg)(decoder_positions)
 
@@ -306,6 +312,7 @@ class Decoder(nn.Module):
       logits = linears.DenseGeneral(
           cfg.vocab_size,
           dtype=jnp.float32 if cfg.logits_dot_in_fp32 else cfg.dtype,  # for logit training stability
+          kernel_init=NormalInitializer(0.006), # lsp
           kernel_axes=('embed', 'vocab'), # fsdp mp
           name='logits_dense')(y) # We do not quantize the logits matmul.
     logits = nn.with_logical_constraint(
@@ -331,7 +338,7 @@ class Transformer(nn.Module):
         features=cfg.emb_dim,
         dtype=cfg.dtype,
         attend_dtype=jnp.float32 if cfg.logits_dot_in_fp32 else cfg.dtype,  # for logit training stability
-        embedding_init=nn.initializers.normal(stddev=1.0),
+        embedding_init=NormalInitializer(0.006), # lsp
         name='token_embedder',
         config=cfg,
     )

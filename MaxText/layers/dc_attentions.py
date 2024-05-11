@@ -1130,10 +1130,15 @@ class Attention(nn.Module):
 
   def query_projection(self, inputs_q: Array) -> Array:
     """Query projection."""
+    
+    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
+    def query_init(*args):
+      return self.kernel_init(*args) / depth_scaling
+
     query_proj = DenseGeneral(
       features=(self.num_query_heads, self.head_dim),
       axis=-1,
-      kernel_init=self.kernel_init, # lsp
+      kernel_init=query_init, # lsp
       kernel_axes=('embed', 'heads', 'kv'), # fsdp, mdl, None
       dtype=self.dtype,
       name='query',
