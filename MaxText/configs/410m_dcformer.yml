@@ -86,6 +86,7 @@ zero_loss: True # whether to compute id zero loss when train
 iter_file_nums: 2 # how many files every file batch
 use_static_w: True
 per_device_batch_size: 8.0
+eval_per_device_batch_size: 32.0 # eval also use per_device_batch_size
 eval_loop_num_batches: 162
 eval_interval: 2700  # the specific number of train step between eval_step
 qk_norm: True
@@ -176,7 +177,6 @@ tokenizer_path: "assets/tokenizer.llama2"
 dataset_name: 'c4/en:3.0.1'
 eval_dataset_name: 'c4/en:3.0.1'
 eval_split: 'val_with_eos'
-# eval_per_device_batch_size: 4.0 # eval also use per_device_batch_size
 max_corpus_chars: 10_000_000
 dataset_type: pile # must be c4 or synthetic
 

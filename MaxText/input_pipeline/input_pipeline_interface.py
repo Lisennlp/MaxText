@@ -197,7 +197,7 @@ def make_pile_train_iterator(config, mesh, add_bos, add_eos):
                             name=eval_name, 
                             path=eval_pathes, 
                             meta_dict={},
-                            batch_size=int(config.per_device_batch_size * num_local_devices),
+                            batch_size=int(config.eval_per_device_batch_size * num_local_devices),
                             seq_len=config.max_target_length,
                             repeat=config.epoch,
                             seed=config.data_shuffle_seed,
