@@ -1130,15 +1130,11 @@ class Attention(nn.Module):
 
   def query_projection(self, inputs_q: Array) -> Array:
     """Query projection."""
-    
-    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
-    def query_init(*args):
-      return self.kernel_init(*args) / depth_scaling
 
     query_proj = DenseGeneral(
       features=(self.num_query_heads, self.head_dim),
       axis=-1,
-      kernel_init=query_init, # lsp
+      kernel_init=self.kernel_init, # lsp
       kernel_axes=('embed', 'heads', 'kv'), # fsdp, mdl, None
       dtype=self.dtype,
       name='query',
@@ -1259,6 +1255,7 @@ class Attention(nn.Module):
         epsilon=self.config.normalization_layer_epsilon,
         )(key)
 
+        
     # apply ROPE
     query = RotaryEmbedding(
         embedding_dims=self.head_dim, name='query_rotary'
@@ -1275,7 +1272,10 @@ class Attention(nn.Module):
     if self.config.query_chunk_size:
       query_chunk_size = int(self.config.query_chunk_size)
     else:
-      query_chunk_size = None
+      query_chunk_size = None 
+
+    depth_scaling = jnp.sqrt(self.head_dim).astype(self.dtype)
+    query /= depth_scaling
 
     attention_op = AttentionOp(mesh=self.mesh,
                                attention_kernel=self.attention_kernel,

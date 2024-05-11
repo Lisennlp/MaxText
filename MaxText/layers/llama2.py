@@ -43,6 +43,10 @@ Attention = attentions.Attention
 RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
 
+from layers import initializers
+
+NormalInitializer = initializers.nd_dense_init_normal
+
 #-----------------------------------------
 # The Decoder Layer specific for Llama2
 #-----------------------------------------
@@ -110,7 +114,8 @@ class LlamaDecoderLayer(nn.Module):
       name=f'self_attention_{block_index}',
       float32_qk_product = True,  # computes logits in float32 for stability.
       float32_logits = True,
-      quant=self.quant)
+      quant=self.quant,
+      kernel_init=NormalInitializer(0.006))
     # Attention residual
     attention_lnx = attention_layer(
             lnx,
@@ -141,6 +146,7 @@ class LlamaDecoderLayer(nn.Module):
         name=f'mlp_{block_index}',
         config=cfg,
         quant=self.quant,
+        kernel_init=NormalInitializer(0.006)
     )(hidden_states, deterministic=deterministic)
     mlp_lnx = nn.with_logical_constraint(
         mlp_lnx, ('activation_batch', 'activation_length', 'activation_embed')
