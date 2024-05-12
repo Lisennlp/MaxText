@@ -69,6 +69,7 @@ jax==0.4.25
 
 - **405m dcformer++ vs transformer++**
 
+![alt text](image-1.png)
 
 
 
