@@ -1,5 +1,5 @@
 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-jax[cuda12_pip]==0.4.25  # Must be consistent with the cuda version
+jax[cuda11_pip]==0.4.25  # Must be consistent with the cuda version
 orbax-checkpoint==0.5.1
 absl-py==2.1.0
 flax==0.8.1

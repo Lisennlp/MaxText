@@ -14,9 +14,6 @@ from jax import lax
 from jax import random
 from jax.ad_checkpoint import checkpoint_name
 from jax.experimental import shard_map
-from jax.experimental.pallas.ops import attention as pallas_attention
-from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
-from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_kernel
 import jax.numpy as jnp
 
 import common_types
@@ -30,7 +27,10 @@ if os.environ["HARDWARE"] == "gpu":
    Quant = None
 else:
     from layers import quantizations
+    from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
+    from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_kernel
     Quant = quantizations.AqtQuantization
+
 
 RMSNorm = normalizations.RMSNorm
 
