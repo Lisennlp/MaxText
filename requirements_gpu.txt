@@ -11,9 +11,6 @@ tensorflow_datasets==4.9.4
 ml_collections==0.1.1
 tensorflow_text==2.16.1
 sentencepiece==0.2.0
-cloud_tpu_diagnostics
+cloud_tpu_diagnostics==0.1.5
 protobuf==3.20.3
-einops
-
-# fix pyqt5 problem?
-# sudo apt install python3-qtpy
+einops==0.6.1
