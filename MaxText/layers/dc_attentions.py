@@ -266,10 +266,10 @@ class CrossHeadProjection(nn.Module):
   num_heads: int = 0
   num_groups: int = 0
   relative_scale: float = 0.1
-  use_static_w: bool = True
+  static_proj: bool = True
   loop_over_dynamic_hd: bool = True
-  tgt_dependent: bool = True
-  src_dependent: bool = True
+  query_wise: bool = True
+  key_wise: bool = True
   input_activation_cls: Optional[str] = None
   use_input_bias: bool = True
   left_mul: bool = False
@@ -287,7 +287,7 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
-    print(f'num_heads: {self.num_heads} num_heads_per_group: {self.num_heads_per_group} use_static_w: {self.use_static_w}')
+    print(f'num_heads: {self.num_heads} num_heads_per_group: {self.num_heads_per_group} static_proj: {self.static_proj}')
 
     def init_fn(out_dim, in_dim=None):
       if self.init is not None: 
@@ -305,7 +305,7 @@ class CrossHeadProjection(nn.Module):
         assert False, f'[{in_dim}, {out_dim}]'
       return math.sqrt(2.0 / (in_dim + out_dim)) * relative_scale
 
-    if self.use_static_w:
+    if self.static_proj:
       if self.squeeze_ratio is None:
         shape=[self.num_groups, self.num_heads_per_group, self.num_heads_per_group]
         scale = init_fn(self.num_heads_per_group)
@@ -336,7 +336,7 @@ class CrossHeadProjection(nn.Module):
 
     # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
     # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
-    if self.use_static_w:
+    if self.static_proj:
       if self.squeeze_ratio is None: # None
         w = self.w
         _inputs = inputs
@@ -360,7 +360,7 @@ class CrossHeadProjection(nn.Module):
         dynamic_hidden_dim = w1.shape[dw_label.index(hidden_sym)]
         eqn1 = f'{inputs_label},{dw_label}->{hidden_label}' # 'BGMTS,BTGMI->BGITS'
         eqn2 = f'{hidden_label},{dw_label}->{inputs_label}' # 'BGITS,BTGMI->BGMTS'
-        if sym == 'T' and self.tgt_dependent or sym == 'S' and self.src_dependent:
+        if sym == 'T' and self.query_wise or sym == 'S' and self.key_wise:
           if self.loop_over_dynamic_hd and dynamic_hidden_dim <= 2:
             for i in range(dynamic_hidden_dim):
               if dw_label[-1] == hidden_sym:
@@ -382,8 +382,8 @@ class CrossHeadProjection(nn.Module):
     if qdd is not None:
       for sym, dd in zip(['T', 'S'], [qdd, kdd]):
         dd_label = f'B{sym}GM'
-        if sym == 'T' and self.tgt_dependent or sym == 'S' and self.src_dependent or \
-              not self.tgt_dependent and not self.src_dependent:
+        if sym == 'T' and self.query_wise or sym == 'S' and self.key_wise or \
+              not self.query_wise and not self.key_wise:
           dout = jnp.einsum(f'{inputs_label},{dd_label}->{inputs_label}', inputs, dd)
           ret = ret + dout
     return jnp.reshape(ret, shape)  # BGMTS->BNTS
@@ -413,7 +413,7 @@ class AttentionOp(nn.Module):
   deterministic: bool = False
   window_size: int = None
   query_chunk_size: int = None
-  use_static_w: bool = True
+  static_proj: bool = True
 
   def setup(self):
     input_dim = self.num_query_heads * self.head_dim
@@ -455,7 +455,7 @@ class AttentionOp(nn.Module):
                                 precision=self.precision,
                                 num_heads=self.num_query_heads, 
                                 num_groups=self.num_groups,
-                                use_static_w=self.use_static_w,
+                                static_proj=self.static_proj,
                                 query_input_dim=input_dim,
                                 key_input_dim=input_dim,
                                 dynamic_w_hidden_dim=dynamic_w_hidden_dim,
@@ -1292,7 +1292,7 @@ class Attention(nn.Module):
                                query_chunk_size=query_chunk_size,
                                window_size=self.window_size,
                                deterministic=deterministic,
-                               use_static_w=self.config.use_static_w)
+                               static_proj=self.config.static_proj)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
     # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')

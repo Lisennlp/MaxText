@@ -84,13 +84,18 @@ eval_shuffle_buffer_size: null # null or int
 training_num_batches_to_skip: null # skip data , null or int
 zero_loss: True # whether to compute id zero loss when train
 iter_file_nums: 2 # how many files every file batch
-use_static_w: True
+static_proj: False # default false
 per_device_batch_size: 8.0
 eval_per_device_batch_size: 32.0 # eval also use per_device_batch_size
 eval_loop_num_batches: 162
 eval_interval: 2700  # the specific number of train step between eval_step
-qk_norm: True
- 
+qk_norm: True # 405m use true, but 2b8 model use false
+
+pre_compose: True # pax: PROJECT_LOGITS
+post_compose: True # pax: PROJECT_PROBS
+query_wise: True # pax: TGT_DEPENDENT
+key_wise: True # pax: SRC_DEPENDENT
+  
 head_dim: 128
 # mixture of experts (moe)
 num_experts: 1

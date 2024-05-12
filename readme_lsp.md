@@ -28,14 +28,16 @@ python MaxText/train.py MaxText/configs/base.yml run_name=$RUN_NAME
 
 ## v4-16 pod train single slice
 ## clone resposity
-export TPU_PREFIX=llm-jax-v4-64-10
+export TPU_PREFIX=llm-jax-v4-64-11
 export QR_ID=$TPU_PREFIX
 export ZONE=us-central2-b
-RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/410m/'
+<!-- RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/410m/qknorm0511/' -->
+RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/410m/llama2_0511/'
+
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="git clone https://github.com/Lisennlp/MaxText.git"
 ## 安装
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="cd /home/lishengping/projects/;/home/lishengping/miniconda3/bin/pip install -r MaxText/requirements_lsp.txt"
-gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd /home/lishengping/projects/MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/410m_dcformer.yml  run_name=$RUN_NAME  > train.log 2>&1 &"
+gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd /home/lishengping/projects/MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/llama2.yml  run_name=$RUN_NAME  > train.log 2>&1 &"
 
 
 
