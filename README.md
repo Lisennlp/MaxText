@@ -23,10 +23,10 @@ jax==0.4.25
     # v5p create command
     gcloud alpha compute tpus queued-resources create $TPU_NAME --node-id $TPU_NAME  --project $PROJECT_ID   --zone=$ZONE   --accelerator-type=$TPU_TYPE --runtime-version v2-alpha-tpuv5 --service-account $SERVICE_ACCOUNT   --best-effort
 
-*SERVICE_ACCOUNT*: it can be obtained through command ‘gcloud iam service-accounts list’. The result is similar to: ***@developer.gserviceaccount.com   
-*TPU_NAME*: tpu name  
-*TPU_TYPE*: tpu type, such as: v3-8, v3-32, v4-8, v4-32, v5p-8, v5p-32.....   *PROJECT_ID*: your project id  
-*--preemptible/best-effort*: if you don't want to create a preemption, you can remove this parameter  
+***SERVICE_ACCOUNT***: &nbsp;it can be obtained through command &nbsp;’*gcloud iam service-accounts list*‘&nbsp;. The result is similar to: ***@developer.gserviceaccount.com   
+***TPU_NAME***:&nbsp;tpu name  
+***TPU_TYPE***:&nbsp;tpu type, such as: v3-8, v3-32, v4-8, v4-32, v5p-8, v5p-32.....   ***PROJECT_ID***: your project id  
+***--preemptible/best-effort***:&nbsp;if you don't want to create a preemption, you can remove this parameter  
 
 #### 3. Install
     pip install -r MaxText/requirements_tpu.txt  # tpu
@@ -38,8 +38,7 @@ jax==0.4.25
     export ZONE=...
     RUN_NAME='gs:/...'  # checkpoint and tensorboard save dir
     CONFIG_FILE=...  # dcformer_pp_405m.yml
-    export HARDWARE=tpu # gpu or tpu
-
+    export HARDWARE=tpu # gpu or tpu  
     gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu |tee train.log"
 
 #### 4.2 Train on GPU
