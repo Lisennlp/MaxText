@@ -175,6 +175,11 @@ def maybe_initialize_jax_distributed_system(raw_keys):
 
       For CPUs, we call jax.distributed.initialize() explicitly, with the specified arguments.
   """
+  env_hardware = os.environ['HARDWARE']
+  if env_hardware:
+    assert env_hardware in ['tpu', 'gpu']
+    raw_keys['hardware'] =env_hardware
+  
   if (raw_keys["enable_checkpointing"] and raw_keys["async_checkpointing"]
                 and raw_keys["compile_topology_num_slices"]==-1) or raw_keys["hardware"]=='gpu_multiprocess':
     max_logging.log("Attempting to initialize the jax distributed system...")

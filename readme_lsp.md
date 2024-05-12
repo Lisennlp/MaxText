@@ -41,7 +41,6 @@ gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd /home/lishengping/projects/MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/dcformer_pp_405m.yml  run_name=$RUN_NAME  > train.log 2>&1 &"
 
 
-
 export TPU_PREFIX=llm-jax-v3-8-10
 export ZONE=us-central1-a
 RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext0419'
@@ -58,3 +57,12 @@ gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command=" sudo rm -r /home/lishengping/projects/MaxText; cd /home/lishengping/projects/; git clone https://github.com/Lisennlp/MaxText.git"
 
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; killall main.py; cd /home/lishengping/projects/MaxText; /home/lishengping/miniconda3/bin/python MaxText/train.py MaxText/configs/410m_dcformer.yml run_name=$RUN_NAM > train.log 2>&1 &"
+
+GPU:
+gcloud auth login
+gcloud auth application-default login
+export HARDWARE='gpu'
+RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext/gpu/'
+CUDA_VISIBLE_DEVICES=6,7 python MaxText/train.py MaxText/configs/dcformer_pp_405m.yml run_name=$RUN_NAME
+
+<!-- python -c 'import os; print(os.environ["HARDWARE"])' -->

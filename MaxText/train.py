@@ -56,7 +56,10 @@ from cloud_tpu_diagnostics.configuration import debug_configuration
 from cloud_tpu_diagnostics.configuration import diagnostic_configuration
 from cloud_tpu_diagnostics.configuration import stack_trace_configuration
 
-from layers import quantizations
+
+if os.environ["HARDWARE"] != "gpu":
+  from layers import quantizations
+
 from absl import logging
 
 
@@ -325,7 +328,10 @@ def setup_mesh_and_model(config):
   print(f'config: {config}')
 
   # Model and Optimizer definition
-  quant = quantizations.configure_quantization(config)
+  if os.environ["HARDWARE"] == "gpu":
+    quant = None
+  else:
+    quant = quantizations.configure_quantization(config)
   print(f'quant: {quant}')
   
   model = Transformer(config, mesh, quant=quant)
