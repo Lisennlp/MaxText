@@ -68,9 +68,6 @@ EPS = 1e-8
 
 
 
-# mesh = Mesh(device_ids=array([[[[[[0]]]], [[[[1]]]], [[[[2]]]], [[[[3]]]], [[[[6]]]],[[[[7]]]],
-# [[[[4]]]],[[[[5]]]]]]), axis_names=('data', 'fsdp', 'fsdp_transpose', 'sequence', 'tensor', 'autoregressive'))
-# (1, -1, 1, 1, 1 ,1)
 def validate_train_config(config):
   """ Validates the configuration is set correctly for train.py"""
 
@@ -218,7 +215,6 @@ def loss_fn(model, config, data, dropout_rng, params, is_train=True):
     loss: average loss
     aux: a dictionary including intermediate_outputs, total_loss, and total_weights
   '''
-  # inputs, targets, segments, positions = apply_args
   rng1, aqt_rng = jax.random.split(dropout_rng)
 
   # decimate proportion of data when per_device_batch_size<1
@@ -489,9 +485,7 @@ def train_loop(config, state=None):
           cumulative_eval_metrics['total_weights'] += _weight
           mean_eval_loss = _eval_loss / _weight
           print(f'edx: {edx}, mean_eval_loss: {mean_eval_loss:.3f}')
-          # lsp
         except Exception as e:
-          # eval_data_iterator = eval_data_iterator.reset()
           print(f'error: {e}')
 
       eval_loss = cumulative_eval_metrics['total_loss'] / (cumulative_eval_metrics['total_weights'] + EPS)
