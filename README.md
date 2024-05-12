@@ -5,7 +5,6 @@ This directory contains our jax implementation of Dcoformer. Note that our state
 ```
 python==3.10.10  
 jax==0.4.25
-
 ```
 
 ### Data Prepare
