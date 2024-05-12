@@ -69,7 +69,7 @@ jax==0.4.25
 
 - **405m dcformer++ vs transformer++**
 
-![alt text](image-1.png)
+![Loss曲线](pics/405m_dcformer_pp_vs_transformer_pp_loss.png)
 
 
 
