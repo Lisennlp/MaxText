@@ -1,37 +1,19 @@
-"""
- Copyright 2023 Google LLC
+from typing import Optional
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
-
-"""Transformer model definition."""
-# pylint: disable=arguments-differ
-# pylint: disable=no-name-in-module
-
+import jax
 from flax import linen as nn
 from jax.sharding import Mesh
 import jax.numpy as jnp
-# from jax.experimental.pallas.ops.tpu import flash_attention
 from layers import dc_attentions
 from layers import embeddings
 from layers import linears
 from layers import normalizations
 from layers import models
 from layers import quantizations
-import jax
+from layers import initializers
 
 import common_types
-from typing import Optional
+
 
 Array = common_types.Array
 Config = common_types.Config
@@ -43,17 +25,10 @@ Embed = embeddings.Embed
 Attention = dc_attentions.Attention
 RMSNorm = normalizations.RMSNorm
 Quant = quantizations.AqtQuantization
-
-
-
-from layers import initializers
-
 NormalInitializer = initializers.nd_dense_init_normal
 
-
-
 #-----------------------------------------
-# The Decoder Layer specific for Dcformer
+# The Decoder Layer specific for Dcformer++
 #-----------------------------------------
 
 
@@ -74,7 +49,6 @@ class DcformerDecoderLayer(nn.Module):
                ):
     num_layers_per_block = 1 if num_layers_per_block is None else int(num_layers_per_block)
     window_size = self.config.window_size
-    print(f'num_layers_per_block: {num_layers_per_block} window_size: {window_size}')
     if window_size is None:
         window_size = [None]
     elif isinstance(window_size, list):
@@ -83,11 +57,6 @@ class DcformerDecoderLayer(nn.Module):
     else:
         raise ValueError(f'Window size: ‘{window_size}’ type is error.....')
 
-    # if self.config.remat:
-    #     sub_block_fn = nn.remat(
-    #         self.sub_block, policy=jax.checkpoint_policies.nothing_saveable
-    #     )
-    # else:
     for i in range(num_layers_per_block):
         layer_output = self.sub_block(inputs, decoder_segment_ids, decoder_positions, deterministic, model_mode, window_size[i], i)
         inputs = layer_output[0] if self.config.scan_layers else layer_output

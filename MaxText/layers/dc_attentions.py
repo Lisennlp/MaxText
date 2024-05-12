@@ -1,17 +1,3 @@
-#  Copyright 2023 Google LLC
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#       https://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-
 """Attentions Layers."""
 
 import functools
@@ -37,14 +23,13 @@ from layers import embeddings
 from layers import initializers
 from layers import linears
 from layers import quantizations
-from einops import rearrange, repeat  # XD
+from einops import rearrange, repeat
 from layers import normalizations
+
 
 RMSNorm = normalizations.RMSNorm
 
-
 Dtype = Any
-
 
 Array = common_types.Array
 Config = common_types.Config
@@ -126,9 +111,6 @@ def _compute_slide_attn_mask(w, window_size, length: int, dtype: jnp.dtype = jnp
   length: query length that before split
   dtype: query dtype
   """
-  # w = 256
-  # length = 2048
-  # window_size = 1600
   if w is None:
     w = length
   if window_size is None:
@@ -147,7 +129,6 @@ def _compute_slide_attn_mask(w, window_size, length: int, dtype: jnp.dtype = jnp
     m = m1
   large_negative_number = get_large_negative_number(dtype)
   m = m.astype(dtype)
-  # m = m * large_negative_number or as follow:
   m = jnp.where((m > 0.5), large_negative_number, m)
   # bnts
   return m[jnp.newaxis, jnp.newaxis, ...]
@@ -167,14 +148,10 @@ class DynamicWeightProjection(nn.Module):
   input_dim: int = None
   dynamic_w_init: float = None
   dynamic_d_init: float = None
-  dynamic_squeeze_ratio: int = None  # mqy
+  dynamic_squeeze_ratio: int = None
   decompose_dynamic_w: bool = True
-  # dw_activation_cls: activations_lib.BaseActivation = None
-  # dw1_norm_cls: normalizations.BaseNormalization = None  # not effective without learned bias # mqy
-  dynamic_w_hidden_dim: int = None  # mqy
-  # dynamic_d_hidden_dim: int = None
+  dynamic_w_hidden_dim: int = None
   merge_dynamic_w_hidden: bool = False
-  # dw_hidden_activation_cls: activations_lib.BaseActivation = None  # mqy
   deterministic: bool = False
   dynamic_dropout_rate: Optional[float] = None
   quant: Optional[Quant] = None
@@ -183,19 +160,15 @@ class DynamicWeightProjection(nn.Module):
     self.num_heads_per_group = self.num_heads // self.num_groups
     kwargs = dict(
       dtype=self.dtype,
-      # param_dtype=self.param_dtype,
       use_bias=False,
-      # precision=self.precision,
     )
 
     if self.dynamic_w_init is not None:
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
-      print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim} dynamic_dropout_rate: {self.dynamic_dropout_rate}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),  quant=self.quant,  # 0.00014
         kernel_init=NormalInitializer(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), 
        kernel_axes=('embed', None, 'heads', 'mlp'),
-        # kernel_axes=('fsdp', 'data', None, 'tensor'),
         **kwargs)
       self.dw_hidden_activation = nn.gelu
 
@@ -222,37 +195,31 @@ class DynamicWeightProjection(nn.Module):
     if self.n_splits == 2:
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))   # BTG2,64
       if self.dynamic_dropout_rate is not None:
-        dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)  # XD may add
-      # w1, w2 = jnp.split(self.qkw(dw_hidden), 2, axis=-2)
+        dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)
       w1, w2 = jnp.split(jnp.einsum('BTGCK,GCKIM->BTGCIM', dw_hidden, self.qkw), 2, axis=-2)
       w1 = self.dw1_norm(w1)
-      # w2 = self.dw_activation(w2)
       pre_w1, post_w1 = unbind(w1, 2, axis=3) # BTG2IM->[BTGIM]*2
       pre_w2, post_w2 = unbind(w2, 2, axis=3)
 
-      dd = self.dd(query_vec) # jnp.einsum('BTD,DGM->BTGM', query_vec, theta.dd)
+      dd = self.dd(query_vec)
       dd = self.dw_activation(dd)
       if self.dynamic_dropout_rate is not None:
-        dd = self.dropout(dd, deterministic=self.deterministic)  # XD may add
+        dd = self.dropout(dd, deterministic=self.deterministic)
       pre_dd, post_dd = jnp.split(dd, 2, axis=-1)
       return (pre_w1, pre_w2, pre_dd), (post_w1, post_w2, post_dd)
     else:
-      # dw_hidden = jnp.einsum('BTD,DGCK->BTGCK', query_vec, theta.dw1)  # C=4 [pre,post]*[query,key]
-      # w1, w2 = jnp.split(jnp.einsum('BTGCK,GCKIM->BTGCIM', dw_hidden, theta.qkw), 2, axis=-2)
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))
       if self.dynamic_dropout_rate is not None:
-        dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)  # XD may add
-      # w1, w2 = jnp.split(self.qkw(dw_hidden), 2, axis=-2)
+        dw_hidden = self.dropout(dw_hidden, deterministic=self.deterministic)
       w1, w2 = jnp.split(jnp.einsum('BTGCK,GCKIM->BTGCIM', dw_hidden, self.qkw), 2, axis=-2)
       w1 = self.dw1_norm(w1)
-      # w2 = self.dw_activation(w2)
       pre_qw1, pre_kw1, post_qw1, post_kw1 = unbind(w1, 4, axis=3) # BTG4IM->[BTGIM]*4
       pre_qw2, pre_kw2, post_qw2, post_kw2 = unbind(w2, 4, axis=3)
 
-      dd = self.dd(query_vec) # jnp.einsum('BTD,DGM->BTGM', query_vec, theta.dd)
+      dd = self.dd(query_vec)
       dd = self.dw_activation(dd)
       if self.dynamic_dropout_rate is not None:
-        dd = self.dropout(dd, deterministic=self.deterministic)  # XD may add
+        dd = self.dropout(dd, deterministic=self.deterministic)
       pre_qdd, pre_kdd, post_qdd, post_kdd = jnp.split(dd, 4, axis=-1)
       return (pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd), \
         (post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
@@ -287,8 +254,6 @@ class CrossHeadProjection(nn.Module):
       use_bias=False,
       precision=self.precision,
     )
-    print(f'num_heads: {self.num_heads} num_heads_per_group: {self.num_heads_per_group} static_proj: {self.static_proj}')
-
     def init_fn(out_dim, in_dim=None):
       if self.init is not None: 
         return self.init
@@ -320,9 +285,6 @@ class CrossHeadProjection(nn.Module):
         scale = init_fn(self.num_heads_per_group, in_dim=self.hidden_dim)
         self.w1 = self.param('w2', NormalInitializer(scale), shape, self.param_dtype)
 
-    # shape = (self.num_groups, self.num_heads_per_group, self.num_heads_per_group)
-    # self.w = self.param('w', NormalInitializer(math.sqrt(1. / self.num_heads_per_group) * self.relative_scale), shape, self.param_dtype)
-
   def __call__(self, inputs, qw1 = None, qw2 = None, kw1 = None, kw2 = None, qdd = None, kdd = None):
     shape = inputs.shape  #  (16, 16, 4097, 4097)
     assert inputs.shape[1] == self.num_heads
@@ -333,7 +295,6 @@ class CrossHeadProjection(nn.Module):
     exp = f'{inputs_label},GMN->{out_label}' #  'BGMTS'  GMN   BGNTS
 
     ret = inputs
-
     # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
     # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
     if self.static_proj:
@@ -356,7 +317,7 @@ class CrossHeadProjection(nn.Module):
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
       for sym, (w1, w2) in zip(['T', 'S'], [(qw1, qw2), (kw1, kw2)]):
         dw_label = f'B{sym}G{hidden_sym}M' if w1.shape[-1] == self.num_heads_per_group \
-          else f'B{sym}GM{hidden_sym}'  # w1.shape[-2] == self.num_heads_per_group
+          else f'B{sym}GM{hidden_sym}'
         dynamic_hidden_dim = w1.shape[dw_label.index(hidden_sym)]
         eqn1 = f'{inputs_label},{dw_label}->{hidden_label}' # 'BGMTS,BTGMI->BGITS'
         eqn2 = f'{hidden_label},{dw_label}->{inputs_label}' # 'BGITS,BTGMI->BGMTS'
@@ -402,8 +363,6 @@ class AttentionOp(nn.Module):
   dropout_rate: float = 0.
   dtype: DType = jnp.float32
   quant: Optional[Quant] = None
-  # lsp
-  # dynamic_compose: bool = True
   is_cross_attention: bool = False
   dynamic_dropout_rate: float = None
   precision: PrecisionLike = None
@@ -490,244 +449,7 @@ class AttentionOp(nn.Module):
     assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
     assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
 
-  # Following Pallas MHA Flash Attention Reference.
-  # https://github.com/google/jax/blob/main/jax/experimental/pallas/ops/tpu/flash_attention.py
-  # This mask models (1) separate sequences (decoder_segment_ids) and (2) causality
-  def generate_attention_mask(
-      self,
-      query,
-      key,
-      decoder_segment_ids: Array | None,
-      model_mode: str
-  ) -> Array | None:
-    # mask: is loss mask
-    mask = None
-    if model_mode == common_types.MODEL_MODE_AUTOREGRESSIVE:
-      mask = decoder_segment_ids[:, None, None, None, :] == common_types.DECODING_ACTIVE_SEQUENCE_INDICATOR
-    elif decoder_segment_ids is not None:
-      mask = decoder_segment_ids[:, :, None] == decoder_segment_ids[:, None, :]
-      mask = mask[:, None, None,:, :]
-
-    causal_mask = None # is causal language model attention mask
-    # We enforce causality except for AUTOREGRESSION
-    if model_mode != common_types.MODEL_MODE_AUTOREGRESSIVE:
-      _, q_seq_len, _, _ = query.shape
-      _, kv_seq_len, _, _ = key.shape
-      mask_shape = (q_seq_len, kv_seq_len)
-      row_ids = jax.lax.broadcasted_iota(jnp.int32, mask_shape, 0)
-      col_ids = jax.lax.broadcasted_iota(jnp.int32, mask_shape, 1)
-      causal_mask = (col_ids <= row_ids)[None, None, None, :, :]
-
-    if (mask is not None) and (causal_mask is not None):
-      output_mask = jnp.logical_and(mask, causal_mask)
-    elif mask is not None:
-      output_mask = mask
-    elif causal_mask is not None:
-      output_mask = causal_mask
-    else:
-      output_mask = None
-
-    return jnp.where(output_mask, 0.0, DEFAULT_MASK_VALUE) if output_mask is not None else None
-
-  def apply_attention(self,
-      query: Array,
-      key: Array,
-      value: Array,
-      decoder_segment_ids: Array | None,
-      model_mode: str,
-      inputs_q: Array,
-      inputs_kv: Array):
-    self.check_attention_inputs(query, key, value)
-    if self.attention_kernel == "dot_product":
-      return self.apply_attention_dot(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
-    elif self.attention_kernel == 'flash':
-      if model_mode == common_types.MODEL_MODE_AUTOREGRESSIVE:
-        raise ValueError("""Decode not supported with flash attention.
-                            Use `dot_product` instead.""")
-      return self.tpu_flash_attention(query, key, value, decoder_segment_ids), None, None
-# TODO(b/326467868): bring back cudnn_flash_te once transformer-engine issue in g3 is resolved
-    elif self.attention_kernel == 'cudnn_flash_te': #flash
-      if model_mode == common_types.MODEL_MODE_AUTOREGRESSIVE: #flash
-        raise ValueError("""Decode not supported with flash attention. #flash
-                            Use `dot_product` instead.""") #flash
-      return self.cudnn_flash_attention(query, key, value), None, None #flash
-    else:
-      raise ValueError(f'Unexpected attention kernel {self.attention_kernel=}.')
-
-  def tpu_flash_attention(
-    self,
-    query: Array,
-    key: Array,
-    value: Array,
-    decoder_segment_ids: Array | None) -> Array:
-    """TPU Flash Attention."""
-    # Transpose to ('batch', 'heads', 'length', 'kv')
-    query = jnp.transpose(query, axes=(0, 2, 1, 3))
-    key = jnp.transpose(key, axes=(0, 2, 1, 3))
-    value = jnp.transpose(value, axes=(0, 2, 1, 3))
-
-    if decoder_segment_ids is not None:
-      decoder_segment_ids = splash_attention_kernel.SegmentIds(
-          decoder_segment_ids, decoder_segment_ids
-      )
-    axis_names = nn.logical_to_mesh_axes(self.flash_axis_names)
-    segment_axis_names = nn.logical_to_mesh_axes(
-        (BATCH, 'activation_length_no_heads')
-    )
-
-    @functools.partial(
-        shard_map,
-        mesh=self.mesh,
-        in_specs=(
-            axis_names,
-            axis_names,
-            axis_names,
-            segment_axis_names,
-        ),
-        out_specs=axis_names,
-        check_rep=False,
-    )
-    def wrap_flash_attention(query, key, value, decoder_segment_ids):
-      if decoder_segment_ids is not None:
-        assert (
-            query.shape[2]
-            == decoder_segment_ids.q.shape[1]
-        ), 'Sharding along sequence dimension not allowed in tpu kernel attention'
-      block_sizes = splash_attention_kernel.BlockSizes(
-                                                  block_q=min(512, query.shape[2]),
-                                                  block_kv_compute=min(512, key.shape[2]),
-                                                  block_kv=min(512, key.shape[2]),
-                                                  block_q_dkv=min(512, query.shape[2]),
-                                                  block_kv_dkv=min(512, key.shape[2]),
-                                                  block_kv_dkv_compute=min(512, query.shape[2]),
-                                                  block_q_dq=min(512, query.shape[2]),
-                                                  block_kv_dq=min(512, query.shape[2]),
-      )
-
-      masks = [splash_attention_mask.CausalMask( shape=(query.shape[2],query.shape[2])) for i in range(query.shape[1])]
-      multi_head_mask = splash_attention_mask.MultiHeadMask(masks=masks)
-      splash_kernel = splash_attention_kernel.make_splash_mha(mask = multi_head_mask,
-                                                              head_shards = 1,
-                                                              q_seq_shards = 1,
-                                                              block_sizes = block_sizes)
-      
-      return jax.vmap(splash_kernel)(query,key,value, segment_ids = decoder_segment_ids)
-
-    devices_in_data_fsdp = self.mesh.shape['data'] * self.mesh.shape['fsdp']
-    assert (query.shape[0] / devices_in_data_fsdp).is_integer(), (
-        'Batch dimension should be shardable among the devices in data and fsdp'
-        ' axis'
-    )
-    x = wrap_flash_attention(query, key, value, decoder_segment_ids)
-    x = jnp.transpose(x, axes=(0, 2, 1, 3))
-    return x
-
-# TODO(b/326467868): bring back cudnn_flash_te once transformer-engine issue in g3 is resolved
-  def cudnn_flash_attention( #flash
-    self, #flash
-    query: Array, #flash
-    key: Array, #flash
-    value: Array, #flash
-  ) -> Array: #flash
-    """ #flash
-    CUDNN Flash Attention with Transformer Engine. #flash
-    It is an unstable API. In future release, the API can get changed #flash
-    A stable flash attention API will be included soon. Currently, #flash
-    1. It does not support GQA, num_query_heads == num_kv_heads #flash
-    2. It supports head_dim till 128 #flash
-    GQA support with head_dim=256 will be added soon  #flash
-    """ #flash
-     #flash
-    batch, s_q, n_heads, head_dim = query.shape # pylint: disable=unused-variable #flash
-    _, s_kv, _, _ = key.shape #flash
- #flash
-    import transformer_engine.jax.fused_attn as fused_attn #flash
-    from transformer_engine.jax.fused_attn import AttnBiasType, AttnMaskType, QKVLayout #flash
-    from transformer_engine.jax.fused_attn import is_fused_attn_kernel_available #flash
-    import os #flash
- #flash
-    is_self_attn = True # (inputs_q is inputs_kv) #flash
-    is_gqa = False # (self.num_heads != self.num_gqa_groups) #flash
-    is_qkvpack = (is_self_attn and not is_gqa) #flash
-    qkv_layout = QKVLayout.BS3HD if is_self_attn else QKVLayout.BSHD_BS2HD #flash
-    attn_mask_type = AttnMaskType.CAUSAL_MASK #flash
-    attn_bias_type = AttnBiasType.NO_BIAS #flash
- #flash
-    enable_fused_attn = int(os.getenv("NVTE_FUSED_ATTN", "0")) #flash
- #flash
-    has_fused_attn_kernel = is_fused_attn_kernel_available(self.dtype, self.dtype, qkv_layout, #flash
-                                                            attn_bias_type,  #flash
-                                                            attn_mask_type, #flash
-                                                            self.dropout_rate, self.num_query_heads, #flash
-                                                            self.num_kv_heads, s_q, #flash
-                                                            s_kv, head_dim) #flash
-     #flash
-    if not enable_fused_attn: #flash
-      raise ValueError("Please enable NVTE_FUSED_ATTN: export NVTE_FUSED_ATTN=1") #flash
-       #flash
-    if not has_fused_attn_kernel: #flash
-      raise ValueError("""Flash attention is not supported for current config i.e. head_dim, seq_len, n_heads etc.  #flash
-      Please see transformer_engine/common/fused_attn/fused_attn.cpp:NVTE_Fused_Attn_Backend for details""") #flash
- #flash
-    q = jnp.reshape(query, (*query.shape[:2], 1, *query.shape[-2:])) #flash
-    k = jnp.reshape(key, (*query.shape[:2], 1, *query.shape[-2:])) #flash
-    v = jnp.reshape(value, (*query.shape[:2], 1, *query.shape[-2:])) #flash
-    qkv = jnp.concatenate((q, k, v), axis=2) # to make it (b, s, 3, h, d) #flash
- #flash
-    out = fused_attn.self_fused_attn( #flash
-        qkv=qkv, #flash
-        bias=None, #flash
-        mask=jnp.zeros((batch, 1, s_q, s_kv)),  # no padding #flash
-        seed=None, #flash
-        attn_bias_type=attn_bias_type, #flash
-        attn_mask_type=attn_mask_type, #flash
-        scaling_factor=1.0/math.sqrt(head_dim), #flash
-        dropout_probability=self.dropout_rate, #flash
-        is_training=True) #flash
-   #flash
-    return out #flash
-
-  def compute_local_attention(self, 
-                              attn_weights: Array, 
-                              value: Array) -> tuple[Array, Array, Array]:
-    """Computes the attention of a local subset of the kv cache. 
-    Local attention results will need to be combined with any other local attentions and normalized
-    Based on https://github.com/google-research/google-research/blob/master/scaling_transformer_inference_efficiency/attention.py
-
-    Args:
-        attn_weights (Array): Product of query and key
-        value (Array): Current value
-        aqt_rng (PRNGKey | None): Optional rng
-
-    Returns:
-        (local_out, local_max,): where
-          local_out is local unnormalized output
-          local_max is the local max of exponentials
-          local_sum is the sum of exponentials for this chunk, divided by exp(local_max).
-    """
-    # attn_weights: bsz * n_head * g * qlen * klen
-    local_max = jnp.max(attn_weights, axis=-1, keepdims=True)
-    local_exps = jnp.exp(attn_weights - local_max)
-    local_sum = jnp.sum(local_exps, axis=-1, keepdims=True)
-
-    local_sum = jnp.moveaxis(local_sum, -2, 1)
-    local_max = jnp.moveaxis(local_max, -2, 1)
-
-    local_max = jnp.reshape(local_max, 
-                            (local_max.shape[0], 
-                             local_max.shape[1], 
-                             local_max.shape[2] * local_max.shape[3], 
-                             1)) 
-    local_sum = jnp.reshape(local_sum, 
-                            (local_sum.shape[0], 
-                             local_sum.shape[1], 
-                             local_sum.shape[2] * local_sum.shape[3], 
-                             1)) 
-
-    local_out = self.wv_product(local_exps, value)
-    return local_out, local_max, local_sum
-
-  def apply_attention_dot(
+  def apply_attention(
       self,
       query: Array, 
       key: Array,   
@@ -736,14 +458,13 @@ class AttentionOp(nn.Module):
       model_mode: str = common_types.MODEL_MODE_TRAIN,
       query_vec: Array = None,
       key_vec: Array = None,
-      deterministic: bool = False
   ):
+    self.check_attention_inputs(query, key, value)
+
     b, t, n, _ = query.shape
     h = value.shape[-1]
     s = key.shape[1]
-    # attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
-    # attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1]) # 1 1 t s
-    # 实时计算ATtention mask
+    # ATtention mask compute
     attn_mask = _compute_slide_attn_mask(self.query_chunk_size, self.window_size, t, query.dtype)
 
     if hasattr(self, 'dyn_w_proj'):
@@ -756,14 +477,12 @@ class AttentionOp(nn.Module):
 
     if self.query_chunk_size is None:
       encoded = self._apply_attention_dot(query, key, value, attn_mask,  
-                                                  pre_proj_dw_args=pre_proj_dw_args, 
-                                                  post_proj_dw_args=post_proj_dw_args, 
-                                                  deterministic=deterministic
-                                                  )
+                                          pre_proj_dw_args=pre_proj_dw_args, 
+                                          post_proj_dw_args=post_proj_dw_args, 
+                                          )
     else:
       w = self.query_chunk_size
-      print(f'qlen: {t} w: {w}')
-      # assert t % w == 0, f'{t} % {w} != 0'
+      assert t % w == 0, f'{t} % {w} != 0'
       encoded = jnp.zeros((b, t, n, h), dtype=value.dtype)
       for i in range(t // w):
         start, stop = i * w, (i + 1) * w
@@ -793,7 +512,6 @@ class AttentionOp(nn.Module):
       attn_mask: Array | None,
       pre_proj_dw_args: tuple = (),
       post_proj_dw_args: tuple = (),
-      deterministic: bool = False
   ):
     """Apply Attention."""
     # Casting qk_product and softmaxt computation for float32 for model stability. query: btnh
@@ -802,9 +520,7 @@ class AttentionOp(nn.Module):
       key = key.astype(jnp.float32)
     # bnts
     attn_weights = self.qk_product(query, key)
-    # 5维
-    # attn_mask = self.generate_attention_mask(query, key, decoder_segment_ids, model_mode)
-    # attn_mask = attn_mask.reshape(-1, 1, query.shape[1], key.shape[1])
+    # 5 demonsion
     pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd = pre_proj_dw_args
     post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd = post_proj_dw_args
 
@@ -1075,7 +791,6 @@ class AttentionOp(nn.Module):
     if key.shape != value.shape:
       raise ValueError(f"Can't KV cache with mismatched shapes {key.shape=}, {value.shape=}")
     
-
     if model_mode == common_types.MODEL_MODE_TRAIN:
       return (key, value, decoder_segment_ids), None
     elif model_mode == common_types.MODEL_MODE_PREFILL:
@@ -1089,18 +804,15 @@ class AttentionOp(nn.Module):
   # lsp: atten call
   @nn.compact
   def __call__(self, query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv):
-    # lsp:训练的时候直接返回qkv ： (key, value, decoder_segment_ids), None
-    prefill_kv_cache, ar_kv_cache = self.kv_cache(key, value, decoder_segment_ids, model_mode)
-
     attn_out = self.apply_attention(
-      query=query,
-      key=prefill_kv_cache[0],
-      value=prefill_kv_cache[1],
-      decoder_segment_ids=prefill_kv_cache[2],
-      model_mode=model_mode,
-      inputs_q=inputs_q,
-      inputs_kv=inputs_kv,
-    )
+                                query=query,
+                                key=key,
+                                value=value,
+                                decoder_segment_ids=decoder_segment_ids,
+                                model_mode=model_mode,
+                                query_vec=inputs_q,
+                                key_vec=inputs_kv,
+                              )
     return attn_out
 
 
@@ -1260,7 +972,6 @@ class Attention(nn.Module):
 
     # lsp qk norm
     if self.config.qk_norm:
-      print(f'qk norm......')
       query = RMSNorm(
         dtype=self.config.dtype,
         name=f'q_norm',
@@ -1316,10 +1027,7 @@ class Attention(nn.Module):
                                post_compose=self.config.post_compose)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
-    # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
     out = nn.with_logical_constraint(out, self.out_axis_names)
     # apply output projection,  output dim is set to the input dim.
-    # inputs_q: (16, 2048, 4096)   head_nums * head_dim * model_dim
-    # (16, 2048, 32, 128)  * (  32, 128, 4096)  -> 16 * 2048 * 4096
     out = self.out_projection(inputs_q.shape[-1], out)
     return out
