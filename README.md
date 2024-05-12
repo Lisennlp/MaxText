@@ -2,7 +2,7 @@
 This directory contains our jax implementation of Dcoformer. Note that our state-of-the-art results reported in the paper were obtained by training the model on a large-scale TPU cluster.
 
 ## Environment
-python==3.10.10
+python==3.10.10  
 jax==0.4.25
 
 
