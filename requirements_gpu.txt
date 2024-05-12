@@ -1,5 +1,5 @@
-jax[cuda11_pip]==0.4.25  # 要和cuda版本一致
 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+jax[cuda11_pip]==0.4.25  # 要和cuda版本一致
 absl-py==2.1.0
 flax==0.8.1
 grain==0.1.0

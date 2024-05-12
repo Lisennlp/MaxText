@@ -33,7 +33,7 @@ export QR_ID=$TPU_PREFIX
 export ZONE=us-central2-b
 <!-- RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/410m/qknorm0511/' -->
 <!-- RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/405m/qknorm_qscale_use_w_true_0512/' -->
-RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/405m/test/'
+RUN_NAME='gs://llm_base_models_us-central2/dcformer/maxtext/405m/test2/'
 
 gcloud compute tpus tpu-vm ssh $TPU_PREFIX --zone=$ZONE --worker=all --command="sudo rm -r /home/lishengping/projects/MaxText; cd /home/lishengping/projects; git clone https://github.com/Lisennlp/MaxText.git"
 ## 安装
