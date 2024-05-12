@@ -13,11 +13,11 @@ from layers import models
 from layers import initializers
 import tensorflow as tf
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 import common_types
 

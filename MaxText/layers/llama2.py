@@ -22,18 +22,17 @@ import os
 from flax import linen as nn
 from jax.sharding import Mesh
 import jax.numpy as jnp
-# from jax.experimental.pallas.ops.tpu import flash_attention
 from layers import attentions
 from layers import embeddings
 from layers import linears
 from layers import normalizations
 from layers import models
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 import common_types
 from typing import Optional

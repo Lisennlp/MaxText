@@ -26,11 +26,11 @@ from layers import linears
 from einops import rearrange, repeat
 from layers import normalizations
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 RMSNorm = normalizations.RMSNorm
 

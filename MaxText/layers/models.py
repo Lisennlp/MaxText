@@ -32,11 +32,11 @@ from layers import normalizations
 from layers import initializers
 
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 NormalInitializer = initializers.nd_dense_init_normal
 

@@ -35,11 +35,11 @@ from layers import embeddings
 from layers import initializers
 from layers import linears
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 Array = common_types.Array
 Config = common_types.Config

@@ -21,11 +21,11 @@
 import os
 from typing import Optional
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 from layers import linears
 from layers import initializers

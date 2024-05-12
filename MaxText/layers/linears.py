@@ -30,11 +30,11 @@ import common_types
 from layers import initializers
 from layers import normalizations
 
-if os.environ["HARDWARE"] == "tpu":
+if os.environ["HARDWARE"] == "gpu":
+   Quant = None
+else:
     from layers import quantizations
     Quant = quantizations.AqtQuantization
-else:
-    Quant = None
 
 Array = common_types.Array
 Config = common_types.Config
