@@ -414,6 +414,9 @@ class AttentionOp(nn.Module):
   window_size: int = None
   query_chunk_size: int = None
   static_proj: bool = True
+  pre_compose: bool = True
+  post_compose: bool = True
+
 
   def setup(self):
     input_dim = self.num_query_heads * self.head_dim
@@ -448,18 +451,30 @@ class AttentionOp(nn.Module):
         quant=self.quant,
       )
 
-    for name in ['pre_proj', 'post_proj']:
-      setattr(self, name, CrossHeadProjection(
-                                dtype=self.dtype, 
-                                param_dtype=self.param_dtype, 
-                                precision=self.precision,
-                                num_heads=self.num_query_heads, 
-                                num_groups=self.num_groups,
-                                static_proj=self.static_proj,
-                                query_input_dim=input_dim,
-                                key_input_dim=input_dim,
-                                dynamic_w_hidden_dim=dynamic_w_hidden_dim,
-      ))
+    if self.pre_compose:
+      self.pre_proj = CrossHeadProjection(
+                                  dtype=self.dtype, 
+                                  param_dtype=self.param_dtype, 
+                                  precision=self.precision,
+                                  num_heads=self.num_query_heads, 
+                                  num_groups=self.num_groups,
+                                  static_proj=self.static_proj,
+                                  query_input_dim=input_dim,
+                                  key_input_dim=input_dim,
+                                  dynamic_w_hidden_dim=dynamic_w_hidden_dim,
+        )
+    if self.post_compose:
+      self.post_proj = CrossHeadProjection(
+                                  dtype=self.dtype, 
+                                  param_dtype=self.param_dtype, 
+                                  precision=self.precision,
+                                  num_heads=self.num_query_heads, 
+                                  num_groups=self.num_groups,
+                                  static_proj=self.static_proj,
+                                  query_input_dim=input_dim,
+                                  key_input_dim=input_dim,
+                                  dynamic_w_hidden_dim=dynamic_w_hidden_dim,
+        )
 
   def check_attention_inputs(
     self,
@@ -793,16 +808,20 @@ class AttentionOp(nn.Module):
     pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd = pre_proj_dw_args
     post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd = post_proj_dw_args
 
-    attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
+    if self.pre_compose:
+      attn_weights = self.pre_proj(attn_weights, pre_qw1, pre_qw2, pre_kw1, pre_kw2, pre_qdd, pre_kdd)
+
     # apply attention mask
     if attn_mask is not None:
       attn_weights = apply_mask_to_logits(attn_weights, attn_mask)
-    
     if self.float32_logits:
           attn_weights = attn_weights.astype(jnp.float32)
     # normalize the attention weights
     probs = jax.nn.softmax(attn_weights).astype(self.dtype)
-    probs = self.post_proj(probs, post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
+
+    if self.post_compose:
+      probs = self.post_proj(probs, post_qw1, post_qw2, post_kw1, post_kw2, post_qdd, post_kdd)
+
     # Casting softmaxt computation for float32 for model stability.
     probs = probs.astype(value.dtype)
     if attn_mask is not None:
@@ -1292,7 +1311,9 @@ class Attention(nn.Module):
                                query_chunk_size=query_chunk_size,
                                window_size=self.window_size,
                                deterministic=deterministic,
-                               static_proj=self.config.static_proj)
+                               static_proj=self.config.static_proj,
+                               pre_compose=self.config.pre_compose,
+                               post_compose=self.config.post_compose)
 
     out = attention_op(query, key, value, decoder_segment_ids, model_mode, inputs_q, inputs_kv)
     # out (16, 2048, 32, 128)   out_axis_names: ('activation_batch', 'activation_length', 'activation_heads', 'activation_kv')
