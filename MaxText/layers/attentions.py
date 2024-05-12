@@ -16,6 +16,7 @@
 
 import functools
 import math
+import os
 from typing import Optional, Sequence
 
 from flax import linen as nn
@@ -34,7 +35,7 @@ from layers import embeddings
 from layers import initializers
 from layers import linears
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

@@ -17,7 +17,7 @@
 # pylint: disable=no-name-in-module
 
 from typing import Callable, Optional
-
+import os
 
 from flax import linen as nn
 import functools
@@ -32,12 +32,11 @@ from layers import normalizations
 from layers import initializers
 
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:
     Quant = None
-
 
 NormalInitializer = initializers.nd_dense_init_normal
 

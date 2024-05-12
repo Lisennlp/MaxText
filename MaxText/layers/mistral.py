@@ -18,10 +18,10 @@
 # pylint: disable=arguments-differ
 # pylint: disable=no-name-in-module
 
-
+import os
 from typing import Optional
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

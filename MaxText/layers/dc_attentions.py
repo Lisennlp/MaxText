@@ -2,6 +2,7 @@
 
 import functools
 import math
+import os
 from typing import Optional, Sequence, Any
 
 from einops import rearrange, repeat
@@ -25,7 +26,7 @@ from layers import linears
 from einops import rearrange, repeat
 from layers import normalizations
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

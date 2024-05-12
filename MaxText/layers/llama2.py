@@ -17,6 +17,7 @@
 """Transformer model definition."""
 # pylint: disable=arguments-differ
 # pylint: disable=no-name-in-module
+import os
 
 from flax import linen as nn
 from jax.sharding import Mesh
@@ -28,7 +29,7 @@ from layers import linears
 from layers import normalizations
 from layers import models
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

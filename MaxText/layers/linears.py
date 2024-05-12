@@ -16,6 +16,7 @@
 
 import functools
 import operator
+import os
 from typing import Any, Callable, Iterable, Sequence, Tuple, Union, Optional
 
 from absl import logging
@@ -29,7 +30,7 @@ import common_types
 from layers import initializers
 from layers import normalizations
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

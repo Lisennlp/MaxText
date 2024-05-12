@@ -1,4 +1,5 @@
 from typing import Optional
+import os
 
 import jax
 from flax import linen as nn
@@ -12,7 +13,7 @@ from layers import models
 from layers import initializers
 import tensorflow as tf
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:

@@ -13,6 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  """
+import os
 
 from flax import linen as nn
 import common_types
@@ -24,7 +25,7 @@ from layers import initializers
 from layers import embeddings
 from layers import linears
 
-if tf.test.is_gpu_available():
+if os.environ["HARDWARE"] == "tpu":
     from layers import quantizations
     Quant = quantizations.AqtQuantization
 else:
