@@ -22,10 +22,14 @@ import common_types
 from layers import embeddings
 from layers import initializers
 from layers import linears
-from layers import quantizations
 from einops import rearrange, repeat
 from layers import normalizations
 
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
 
 RMSNorm = normalizations.RMSNorm
 
@@ -40,7 +44,6 @@ PRNGKey = common_types.PRNGKey
 DenseGeneral = linears.DenseGeneral
 RotaryEmbedding = embeddings.RotaryEmbedding
 NdInitializer = initializers.NdInitializer
-Quant = quantizations.AqtQuantization
 
 NormalInitializer = initializers.nd_dense_init_normal
 

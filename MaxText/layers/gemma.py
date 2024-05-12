@@ -23,7 +23,13 @@ from layers import attentions
 from layers import initializers
 from layers import embeddings
 from layers import linears
-from layers import quantizations
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
+
 
 from typing import Optional
 
@@ -46,7 +52,6 @@ DEFAULT_MASK_VALUE = -0.7 * float(jnp.finfo(jnp.dtype("float32")).max)
 
 
 nd_dense_init = initializers.nd_dense_init
-Quant = quantizations.AqtQuantization
 
 
 # Decoder and Model definitions

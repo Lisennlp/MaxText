@@ -9,8 +9,14 @@ from layers import embeddings
 from layers import linears
 from layers import normalizations
 from layers import models
-from layers import quantizations
 from layers import initializers
+import tensorflow as tf
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
 
 import common_types
 
@@ -24,7 +30,6 @@ ScanIn = common_types.ScanIn
 Embed = embeddings.Embed
 Attention = dc_attentions.Attention
 RMSNorm = normalizations.RMSNorm
-Quant = quantizations.AqtQuantization
 NormalInitializer = initializers.nd_dense_init_normal
 
 #-----------------------------------------

@@ -33,7 +33,12 @@ import common_types
 from layers import embeddings
 from layers import initializers
 from layers import linears
-from layers import quantizations
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
 
 Array = common_types.Array
 Config = common_types.Config
@@ -44,7 +49,6 @@ PRNGKey = common_types.PRNGKey
 DenseGeneral = linears.DenseGeneral
 RotaryEmbedding = embeddings.RotaryEmbedding
 NdInitializer = initializers.NdInitializer
-Quant = quantizations.AqtQuantization
 
 AxisNames = common_types.AxisNames
 BATCH = common_types.BATCH

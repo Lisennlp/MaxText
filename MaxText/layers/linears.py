@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterable, Sequence, Tuple, Union, Optional
 
 from absl import logging
 
+import numpy as np
 import flax.linen as nn
 import jax
 from jax import lax
@@ -27,8 +28,12 @@ import jax.numpy as jnp
 import common_types
 from layers import initializers
 from layers import normalizations
-from layers import quantizations
-import numpy as np
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
 
 Array = common_types.Array
 Config = common_types.Config
@@ -39,7 +44,6 @@ nd_dense_init = initializers.nd_dense_init
 bias_init = initializers.default_bias_init
 
 RMSNorm = normalizations.RMSNorm
-Quant = quantizations.AqtQuantization
 
 def _convert_to_activation_function(
     fn_or_string: Union[str, Callable[..., Any]]) -> Callable[..., Any]:

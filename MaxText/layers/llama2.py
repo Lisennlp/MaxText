@@ -27,7 +27,12 @@ from layers import embeddings
 from layers import linears
 from layers import normalizations
 from layers import models
-from layers import quantizations
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
 
 import common_types
 from typing import Optional
@@ -41,7 +46,6 @@ ScanIn = common_types.ScanIn
 Embed = embeddings.Embed
 Attention = attentions.Attention
 RMSNorm = normalizations.RMSNorm
-Quant = quantizations.AqtQuantization
 
 from layers import initializers
 

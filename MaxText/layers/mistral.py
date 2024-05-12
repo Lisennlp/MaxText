@@ -20,7 +20,13 @@
 
 
 from typing import Optional
-from layers import quantizations
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
+
 from layers import linears
 from layers import initializers
 import jax
@@ -42,7 +48,6 @@ ScanIn = common_types.ScanIn
 Embed = embeddings.Embed
 Attention = attentions.Attention
 RMSNorm = normalizations.RMSNorm
-Quant = quantizations.AqtQuantization
 
 # -----------------------------------------
 # The Decoder Layer for Mistral or Mixtral

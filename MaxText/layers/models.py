@@ -28,12 +28,16 @@ from layers import attentions
 from layers import embeddings
 from layers import linears
 
-
-from layers import normalizations, quantizations
-
-
-
+from layers import normalizations
 from layers import initializers
+
+
+if tf.test.is_gpu_available():
+    from layers import quantizations
+    Quant = quantizations.AqtQuantization
+else:
+    Quant = None
+
 
 NormalInitializer = initializers.nd_dense_init_normal
 
@@ -47,7 +51,6 @@ Embed = embeddings.Embed
 Attention = attentions.Attention
 RMSNorm = normalizations.RMSNorm
 PositionalEmbedding = embeddings.PositionalEmbedding
-Quant = quantizations.AqtQuantization
 
 #------------------------------------------------------------------------------
 # The network: Decoder & Transformer Definitions
