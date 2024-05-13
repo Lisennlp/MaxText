@@ -10,7 +10,7 @@ jax==0.4.25
 ### Data Prepare
 
 
-### Train
+### Getting Started
 #### 1. Clone repositories
 ```bash
 git clone https://github.com/Caiyun-AI/DCFormer.git
@@ -27,7 +27,7 @@ gcloud alpha compute tpus tpu-vm create $TPU_NAME --zone=$ZONE --accelerator-typ
 # v5p create command
 gcloud alpha compute tpus queued-resources create $TPU_NAME --node-id $TPU_NAME  --project $PROJECT_ID   --zone=$ZONE   --accelerator-type=$TPU_TYPE --runtime-version v2-alpha-tpuv5 --service-account $SERVICE_ACCOUNT   --best-effort
 ```
-*```SERVICE_ACCOUNT```*: &nbsp;it can be obtained through command &nbsp; ```gcloud iam service-accounts list```. The result is similar to: ```***@developer.gserviceaccount```.com   
+*```SERVICE_ACCOUNT```*: &nbsp;it can be obtained through command &nbsp; ```gcloud iam service-accounts list```. The result is similar to: ```***@developer.gserviceaccount.com```   
 *```TPU_NAME```*:&nbsp;tpu name  
 *```TPU_TYPE```*:&nbsp;tpu type, v3-8, v3-32, v4-8, v4-32, v5p-8, v5p-32 etc. 
 *```PROJECT_ID```*: your project id  
