@@ -2,7 +2,7 @@
 This directory contains our jax implementation of Dcoformer. Note that our state-of-the-art results reported in the paper were obtained by training the model on a large-scale TPU cluster.
 
 ## Environment
-```
+```plaintext
 python==3.10.10  
 jax==0.4.25
 ```
@@ -35,35 +35,54 @@ jax==0.4.25
 
 #### 3. Install
 
-- For tpu
 ```bash
-    pip install -r MaxText/requirements_tpu.txt
-```
-- For gpu
-
-```bash
-    pip install -r MaxText/requirements_gpu.txt 
+    pip install -r MaxText/requirements_tpu.txt  # for tpu
+    pip install -r MaxText/requirements_gpu.txt   # for gpu
 ```
 
 
 #### 4 Train on different hardware
 - Train on TPU
 ```bash
-    TPU_NAME=...
-    ZONE=...
-    RUN_NAME='gs:/...'  # checkpoint and tensorboard save dir
+    TPU_NAME=...  # tpu name
+    ZONE=... # tpu zone
+    PIP_OR_PYTHON_PATH=...  # python or pip bin dir
+    WORKDIR=/home/xxx/projects/MaxText # worddir
+    RUN_NAME=... # checkpoint and tensorboard save, it can be local dir or bucket dir(gs://...)
     CONFIG_FILE=...  # configs/*.yml
-    export HARDWARE=tpu # gpu or tpu  
-    gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu |tee train.log"
+    gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
 ```
 
 - Train on GPU
 ```bash
-    RUN_NAME='gs:/...'  # checkpoint and tensorboard save dir
+    PIP_OR_PYTHON_PATH=...  # python or pip bin dir
+    WORKDIR=/home/xxx/projects/MaxText # worddir
+    RUN_NAME=...  # checkpoint and tensorboard save, it can be local dir or bucket dir(gs://...)
     CONFIG_FILE=...  # configs/*.yml
     export HARDWARE=gpu # gpu or tpu
-    python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 |tee train.log
+    python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
 ```
+
+- Example on TPU
+
+```bash
+    TPU_NAME=my-tpu
+    ZONE=us-central1-a
+    PIP_OR_PYTHON_PATH=/home/xxx/miniconda3/bin
+    CONFIG_FILE=dcformer_pp_405m.yml
+    RUN_NAME=$WORKDIR/output/
+    gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="$PIP_OR_PYTHON_PATH/pip install -r $WORKDIR/requirements_tpu.txt"
+    gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
+```
+
+- Tensorboard
+    The train results include ```loss```、```grad```、```lr```etc message are writed tensorboard dir(default in $RUN_NAME/tensorboard). You can run a tensorboard program on local machine. such as:
+    
+```bash
+    tensorboad --logdir $RUN_NAME/tensorboard --bind_all --port 60000
+```
+You can view training-related information by visiting the URL （the IP + port of the machine you are running tensoboard on） after successful run
+    
 
 ### 5. Experiments
 
