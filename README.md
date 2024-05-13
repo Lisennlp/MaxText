@@ -19,8 +19,8 @@ jax==0.4.25
 - [Use your dataset](#Use-your-dataset)
 - [Tensorboard](#Tensorboard)
 - [Experiments](#Experiments)
-
-
+    - [405M dcformer++ vs transformer++](#405M-DCFormer++-VS-Transformer++)
+    - [Other Results](#Other-Results)
 
 ## Getting Started
 
@@ -117,9 +117,11 @@ You can view training-related information by visiting the URL （the IP + port o
 
 ## Experiments
 
-#### **405M dcformer++ vs transformer++**
+#### **405M DCFormer++ VS Transformer++**
 
 ![Loss曲线](images/405m_dcformer_pp_vs_transformer_pp_loss.png)
 
+#### **Other Results**
 
+See article for details.😄
 
