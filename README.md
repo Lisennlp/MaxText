@@ -26,7 +26,7 @@ jax==0.4.25
 
 #### 1. Data Preparation
 
-#### 2. Clone Repositories
+#### 2. Clone Library
 ```bash
 git clone https://github.com/Caiyun-AI/DCFormer.git
 ```
@@ -103,7 +103,7 @@ $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_nam
 
 ## Use Your Dataset
 
-You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the yml config file(default dataset is pile). In our library, we currently only support ```c4``` and ```pile``` datasets. If you need to use other self-processed or public datasets, you can Add the corresponding data processing files or functions to the file input_pipeline directory.
+You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the ```.yml``` config file (default dataset is pile). In our library, only support ```c4``` and ```pile``` datasets. Other data sets may be added in the future. If need to use other self-processed or public datasets nowly, you can Add the corresponding data processing files or functions to the file input_pipeline directory.
 
 ## Tensorboard
 
