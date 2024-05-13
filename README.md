@@ -103,11 +103,11 @@ $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_nam
 
 ## Use Your Dataset
 
-You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the ```.yml``` config file (default dataset is pile). In our library, only support ```c4``` and ```pile``` datasets. Other data sets may be added in the future. If need to use other self-processed or public datasets nowly, you can Add the corresponding data processing files or functions to the file input_pipeline directory.
+You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the ```.yml``` config file (default dataset is ```pile```). In our library, only support ```c4``` and ```pile``` datasets. Other datasets may be added in the future. If need to use other self-processed or public datasets nowly, you can Add the corresponding data processing files or functions to the file input_pipeline directory. For detail, you can view function [ create_data_iterator_with_tokenizer](MaxText/input_pipeline/input_pipeline_interface.py) in ```input_pipeline_interface.py```
 
 ## Tensorboard
 
-The train results include ```loss```、```grad```、```lr```etc message are writed tensorboard dir(default in $RUN_NAME/tensorboard). You can run a tensorboard program on local machine. such as:
+The train results include ```loss```、```grad norm```、```learning rate```etc message are writed tensorboard dir(default in $RUN_NAME/tensorboard). You can run a tensorboard program on local machine. such as:
     
 ```bash
 tensorboad --logdir $RUN_NAME/tensorboard --bind_all --port 60000
