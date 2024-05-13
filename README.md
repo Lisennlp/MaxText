@@ -16,6 +16,8 @@ jax==0.4.25
     - [3. Create tpu](#3-Create-tpu)
     - [4. Install](#4-Install)
     - [5. Train on different hardware](#5-Train-on-different-hardware)
+- [Use your dataset](#Use-your-dataset)
+- [Tensorboard](#Tensorboard)
 - [Experiments](#Experiments)
 
 
@@ -99,11 +101,11 @@ $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_nam
 ```
 
 
-- Use your dataset
+## Use your dataset
 
 You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the yml config file(default dataset is pile). In our library, we currently only support ```c4``` and ```pile``` datasets. If you need to use other self-processed or public datasets, you can Add the corresponding data processing files or functions to the file input_pipeline directory.
 
-- Tensorboard
+## Tensorboard
 
 The train results include ```loss```、```grad```、```lr```etc message are writed tensorboard dir(default in $RUN_NAME/tensorboard). You can run a tensorboard program on local machine. such as:
     
@@ -115,7 +117,7 @@ You can view training-related information by visiting the URL （the IP + port o
 
 ## Experiments
 
-- **405m dcformer++ vs transformer++**
+#### **405M dcformer++ vs transformer++**
 
 ![Loss曲线](images/405m_dcformer_pp_vs_transformer_pp_loss.png)
 
