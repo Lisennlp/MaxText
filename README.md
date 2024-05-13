@@ -9,15 +9,33 @@ python==3.10.10
 jax==0.4.25
 ```
 
-### Data Preparation
+
+### Table of Contents
+1. [Getting Started](##getting-started)
+   - [1. Data Preparation](####data-preparation)
+   - [2. Clone repositories](#clone-repositories)
 
 
-### Getting Started
-#### 1. Clone repositories
+### Table of Contents
+- [Getting Started](#Getting-started)
+    - [1. Data Preparation](#1-data-preparation)
+    - [2. Clone repositories](#2-clone-repositories)
+    - [3. Create tpu](#3-Create-tpu)
+    - [4. Install](#4-Install)
+    - [5. Train on different hardware](#5-Train-on-different-hardware)
+- [Experiments](#Experiments)
+
+
+
+## Getting Started
+
+#### 1. Data Preparation
+
+#### 2. Clone repositories
 ```bash
 git clone https://github.com/Caiyun-AI/DCFormer.git
 ```
-#### 2. Create tpu
+#### 3. Create tpu
  
 ```bash
 # v3 create command
@@ -35,7 +53,7 @@ gcloud alpha compute tpus queued-resources create $TPU_NAME --node-id $TPU_NAME 
 *```PROJECT_ID```*: your project id  
 *```--preemptible/best-effort```*:&nbsp;if you don't want to create a preemption, you can remove this parameter  
 
-#### 3. Install
+#### 4. Install
 
 ```bash
 pip install -r MaxText/requirements_tpu.txt  # for tpu
@@ -43,7 +61,7 @@ pip install -r MaxText/requirements_gpu.txt   # for gpu
 ```
 
 
-#### 4 Train on different hardware
+#### 5. Train on different hardware
 - Train on TPU
 ```bash
 TPU_NAME=...  # tpu name
@@ -102,7 +120,7 @@ tensorboad --logdir $RUN_NAME/tensorboard --bind_all --port 60000
 You can view training-related information by visiting the URL （the IP + port of the machine you are running tensoboard on） after successful run
     
 
-### 5. Experiments
+## Experiments
 
 - **405m dcformer++ vs transformer++**
 
