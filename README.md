@@ -49,7 +49,7 @@ pip install -r MaxText/requirements_gpu.txt   # for gpu
 TPU_NAME=...  # tpu name
 ZONE=... # tpu zone
 PIP_OR_PYTHON_PATH=...  # python or pip bin dir
-WORKDIR=/home/xxx/projects/MaxText # worddir
+WORKDIR=... # worddir
 RUN_NAME=... # checkpoint and tensorboard save, it can be local dir or bucket dir(gs://...)
 CONFIG_FILE=...  # configs/*.yml
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
@@ -58,11 +58,20 @@ gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="ex
 - Train on GPU
 ```bash
 PIP_OR_PYTHON_PATH=...  # python or pip bin dir
-WORKDIR=/home/xxx/projects/MaxText # worddir
+WORKDIR=... # workdir
 RUN_NAME=...  # checkpoint and tensorboard save, it can be local dir or bucket dir(gs://...)
 CONFIG_FILE=...  # configs/*.yml
 export HARDWARE=gpu # gpu or tpu
-python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
+$PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
+```
+
+- Example on GPU
+```bash
+PIP_OR_PYTHON_PATH=/home/xxx/miniconda3/bin
+WORKDIR=/home/xxx/projects/MaxText
+CONFIG_FILE=dcformer_pp_405m.yml
+RUN_NAME=$WORKDIR/output/
+$PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
 ```
 
 - Example on TPU
@@ -71,6 +80,7 @@ python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware
 TPU_NAME=my-tpu
 ZONE=us-central1-a
 PIP_OR_PYTHON_PATH=/home/xxx/miniconda3/bin
+WORKDIR=gs://projects/MaxText
 CONFIG_FILE=dcformer_pp_405m.yml
 RUN_NAME=$WORKDIR/output/
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="$PIP_OR_PYTHON_PATH/pip install -r $WORKDIR/requirements_tpu.txt"
