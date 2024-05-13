@@ -9,13 +9,6 @@ python==3.10.10
 jax==0.4.25
 ```
 
-
-### Table of Contents
-1. [Getting Started](##getting-started)
-   - [1. Data Preparation](####data-preparation)
-   - [2. Clone repositories](#clone-repositories)
-
-
 ### Table of Contents
 - [Getting Started](#Getting-started)
     - [1. Data Preparation](#1-data-preparation)
