@@ -1,6 +1,8 @@
 ## Introduction
 This directory contains our jax implementation of Dcoformer. Note that our state-of-the-art results reported in the paper were obtained by training the model on a large-scale TPU cluster.
 
+In addition, the code of this library is modified based on [google/MaxText](https://github.com/google/maxtext) (thanks to google for its contribution), and most of its parameters and functions are used. At the same time, for the sake of simplicity of the code, some that are not used in our article are also removed Function. For the use of other functions, please refer to the source [MaxText](https://github.com/google/maxtext) library
+
 ## Environment
 ```plaintext
 python==3.10.10  
@@ -16,7 +18,7 @@ jax==0.4.25
 git clone https://github.com/Caiyun-AI/DCFormer.git
 ```
 #### 2. Create tpu
-
+ 
 ```bash
 # v3 create command
 gcloud alpha compute tpus tpu-vm create $TPU_NAME --zone=$ZONE --accelerator-type=$TPU_TYPE --version=tpu-vm-base --project=$PROJECT_ID  --scopes=https://www.googleapis.com/auth/cloud-platform --preemptible
