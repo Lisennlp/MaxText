@@ -30,7 +30,7 @@ jax==0.4.25
 ```bash
 git clone https://github.com/Caiyun-AI/DCFormer.git
 ```
-#### 3. Create Tpu
+#### 3. Create TPU
  
 ```bash
 # v3 create command
@@ -56,8 +56,8 @@ pip install -r MaxText/requirements_gpu.txt   # for gpu
 ```
 
 
-#### 5. Train on different hardware
-- Train on TPU
+#### 5. Train On Different Hardware
+- **Train on TPU**
 ```bash
 TPU_NAME=...  # tpu name
 ZONE=... # tpu zone
@@ -68,20 +68,20 @@ CONFIG_FILE=...  # configs/*.yml
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
 ```
 
-- Example on TPU
+- **Example on TPU**
 
 ```bash
 TPU_NAME=my-tpu
 ZONE=us-central1-a
 PIP_OR_PYTHON_PATH=/home/xxx/miniconda3/bin
-WORKDIR=gs://projects/MaxText
+WORKDIR=gs://projects/DcFormer/MaxText # also use local dir
 CONFIG_FILE=dcformer_pp_405m.yml
 RUN_NAME=$WORKDIR/output/
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="$PIP_OR_PYTHON_PATH/pip install -r $WORKDIR/requirements_tpu.txt"
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
 ```
 
-- Train on GPU
+- **Train on GPU**
 ```bash
 PIP_OR_PYTHON_PATH=...  # python or pip bin dir
 WORKDIR=... # workdir
@@ -91,10 +91,10 @@ export HARDWARE=gpu # gpu or tpu
 $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
 ```
 
-- Example on GPU
+- **Example on GPU**
 ```bash
 PIP_OR_PYTHON_PATH=/home/xxx/miniconda3/bin
-WORKDIR=/home/xxx/projects/MaxText
+WORKDIR=/home/xxx/projects/DcFormer/MaxText
 CONFIG_FILE=dcformer_pp_405m.yml
 RUN_NAME=$WORKDIR/output/
 $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=gpu  compile_topology_num_slices=1 | tee train.log
