@@ -7,7 +7,7 @@ python==3.10.10
 jax==0.4.25
 ```
 
-### Data Prepare
+### Data Preparation
 
 
 ### Getting Started
@@ -74,6 +74,10 @@ RUN_NAME=$WORKDIR/output/
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="$PIP_OR_PYTHON_PATH/pip install -r $WORKDIR/requirements_tpu.txt"
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu | tee train.log"
 ```
+
+- Use your dataset
+
+You can change it to your own dataset by modifying the parameters ```dataset_path``` and ```dataset_type``` in the yml config file(default dataset is pile). In our library, we currently only support ```c4``` and ```pile``` datasets. If you need to use other self-processed or public datasets, you can Add the corresponding data processing files or functions to the file input_pipeline directory.
 
 - Tensorboard
 
