@@ -11,15 +11,15 @@ jax==0.4.25
 
 ### Table of Contents
 - [Getting Started](#Getting-started)
-    - [1. Data Preparation](#1-data-preparation)
-    - [2. Clone repositories](#2-clone-repositories)
-    - [3. Create tpu](#3-Create-tpu)
+    - [1. Data Preparation](#1-Data-Preparation)
+    - [2. Clone Library](#2-clone-Library)
+    - [3. Create TPU](#3-Create-TPU)
     - [4. Install](#4-Install)
-    - [5. Train on different hardware](#5-Train-on-different-hardware)
-- [Use your dataset](#Use-your-dataset)
+    - [5. Train On Different Hardware](#5-Train-On-Different-Hardware)
+- [Use Your Dataset](#Use-Your-Dataset)
 - [Tensorboard](#Tensorboard)
 - [Experiments](#Experiments)
-    - [405M dcformer++ vs transformer++](#405M-DCFormer++-VS-Transformer++)
+    - [405M DCFormer++ Vs Transformer++](#405M-DCFormer++-VS-Transformer++)
     - [Other Results](#Other-Results)
 
 ## Getting Started
@@ -117,7 +117,7 @@ You can view training-related information by visiting the URL （the IP + port o
 
 ## Experiments
 
-#### **405M DCFormer++ VS Transformer++**
+#### **405M DCFormer++ Vs Transformer++**
 
 ![Loss曲线](images/405m_dcformer_pp_vs_transformer_pp_loss.png)
 
