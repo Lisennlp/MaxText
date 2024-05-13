@@ -76,6 +76,7 @@ gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="ex
 ```
 
 - Tensorboard
+
     The train results include ```loss```、```grad```、```lr```etc message are writed tensorboard dir(default in $RUN_NAME/tensorboard). You can run a tensorboard program on local machine. such as:
     
 ```bash
