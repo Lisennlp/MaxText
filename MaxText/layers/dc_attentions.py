@@ -301,6 +301,7 @@ class CrossHeadProjection(nn.Module):
     ret = inputs
     # This op I/O too many, loss is lower but speed lower than remove it. suggest remove it
     # ret += jnp.einsum('BGMTS,GMN->BGNTS', inputs, self.w)
+    # __import__('ipdb').set_trace()
     if self.static_proj:
       if self.squeeze_ratio is None: # None
         w = self.w
@@ -308,6 +309,8 @@ class CrossHeadProjection(nn.Module):
         if self.input_activation_cls is not None: # None
           if self.use_input_bias: _inputs += self.ib if self.transpose else jnp.expand_dims(self.ib, axis=(2, 3))
           _inputs = self.input_activation(_inputs)
+        # left_mul: False, exp: 'BGMTS,GMN->BGNTS'  inp: b,1,16,2048,2048 w: 1,16,16 -> b,1,16,2048,2048
+        # 相当于qk proj，对logits进行了一个线性转换
         ret += jnp.einsum(exp, _inputs, w) if not self.left_mul else jnp.einsum(exp, w, _inputs)
       else:
         hidden = jnp.einsum(exp, inputs, self.w1) if not self.left_mul else jnp.einsum(exp, self.w1, inputs)
@@ -318,23 +321,32 @@ class CrossHeadProjection(nn.Module):
         ret += jnp.einsum(exp, hidden, self.w2) if not self.left_mul else jnp.einsum(exp, self.w2, ret)
 
     if qw1 is not None:
+      # hidden_label: BGITS
       hidden_sym = 'I'; hidden_label = inputs_label.replace('M', 'I')
+      # qw1，qw2, kw1, kw2都是 BTGIM
       for sym, (w1, w2) in zip(['T', 'S'], [(qw1, qw2), (kw1, kw2)]):
+        # BTGIM
         dw_label = f'B{sym}G{hidden_sym}M' if w1.shape[-1] == self.num_heads_per_group \
           else f'B{sym}GM{hidden_sym}'
+        # I: 2
         dynamic_hidden_dim = w1.shape[dw_label.index(hidden_sym)]
-        eqn1 = f'{inputs_label},{dw_label}->{hidden_label}' # 'BGMTS,BTGMI->BGITS'
-        eqn2 = f'{hidden_label},{dw_label}->{inputs_label}' # 'BGITS,BTGMI->BGMTS'
+        eqn1 = f'{inputs_label},{dw_label}->{hidden_label}' # 'BGMTS,BTGMI->BGITS' # I1. BGMTS BTGM -> BGTS
+        eqn2 = f'{hidden_label},{dw_label}->{inputs_label}' # 'BGITS,BTGMI->BGMTS' # I1. BGTS BTGM -> BGMTS
         if sym == 'T' and self.query_wise or sym == 'S' and self.key_wise:
           if self.loop_over_dynamic_hd and dynamic_hidden_dim <= 2:
             for i in range(dynamic_hidden_dim):
+              # M != I
               if dw_label[-1] == hidden_sym:
                 hidden = jnp.einsum(eqn1.replace(hidden_sym, ''), inputs, w1[..., i])
                 out = jnp.einsum(eqn2.replace(hidden_sym, ''), hidden, w2[..., i])
+              # here lsp
               else:
                 assert dw_label[-2] == hidden_sym, dw_label
-                hidden = jnp.einsum(eqn1.replace(hidden_sym, ''), inputs, w1[..., i, :])
-                out = jnp.einsum(eqn2.replace(hidden_sym, ''), hidden, w2[..., i, :])
+                # # BGMTS BTGM -> BGTS ，w1相当于每个头都分配了一个权重，该操作就是基于这个权重对头进行整合。
+                hidden = jnp.einsum(eqn1.replace(hidden_sym, ''), inputs, w1[..., i, :]) 
+                # 整合后，又重新基于w2进行拆分。
+                out = jnp.einsum(eqn2.replace(hidden_sym, ''), hidden, w2[..., i, :]) # BGTS BTGM -> BGMTS 
+                # 上述两个操作有点像对每个头的注意力分数进行融合并重新分配
               ret = ret + out
           else:
             hidden = jnp.einsum(eqn1, inputs, w1)
@@ -346,9 +358,10 @@ class CrossHeadProjection(nn.Module):
 
     if qdd is not None:
       for sym, dd in zip(['T', 'S'], [qdd, kdd]):
-        dd_label = f'B{sym}GM'
+        dd_label = f'B{sym}GM'  # BTGM
         if sym == 'T' and self.query_wise or sym == 'S' and self.key_wise or \
               not self.query_wise and not self.key_wise:
+          # BGMTS, BTGM -> BGMTS # dd相当于每个头都分配了一个权重，但是这个操作没有对头进行整合，只是每个头乘了一个权重系数而已。
           dout = jnp.einsum(f'{inputs_label},{dd_label}->{inputs_label}', inputs, dd)
           ret = ret + dout
     return jnp.reshape(ret, shape)  # BGMTS->BNTS
@@ -401,6 +414,7 @@ class AttentionOp(nn.Module):
           quant=self.quant,
         ))
     else:
+      # lsp: here
       self.dyn_w_proj = DynamicWeightProjection(
         num_heads=self.num_query_heads, num_groups=self.num_groups,
         input_dim=self.num_query_heads * self.head_dim, n_splits=4,
