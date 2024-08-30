@@ -275,7 +275,7 @@ class CrossHeadProjection(nn.Module):
       return math.sqrt(2.0 / (in_dim + out_dim)) * relative_scale
 
     if self.static_proj:
-      if self.squeeze_ratio is None:
+      if self.squeeze_ratio is None: # None
         shape=[self.num_groups, self.num_heads_per_group, self.num_heads_per_group]
         scale = init_fn(self.num_heads_per_group)
         self.w = self.param('w', NormalInitializer(scale), shape, self.param_dtype)

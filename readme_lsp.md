@@ -65,4 +65,42 @@ export HARDWARE='gpu'
 RUN_NAME='gs://llm_base_models_us-east5/lsp_test/maxtext/gpu/'
 CUDA_VISIBLE_DEVICES=6,7 python MaxText/train.py MaxText/configs/dcformer_pp_405m.yml run_name=$RUN_NAME |tee train.log
 
-<!-- python -c 'import os; print(os.environ["HARDWARE"])' -->
+
+
+TPU_NAME=llm-jax-v3-8-10
+ZONE=us-central1-a
+PIP_OR_PYTHON_PATH=/home/lishengping/miniconda3/bin
+WORKDIR=/home/lishengping/projects/MaxText
+CONFIG_FILE=test.yml
+DATASET_PATH=gs://common_datasets_us-central2/pythia_pile_idxmaps_tfrecord/
+RUN_NAME=$WORKDIR/410m/
+
+gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="$PIP_OR_PYTHON_PATH/pip install -r $WORKDIR/requirements_tpu.txt"
+gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="export HARDWARE=tpu; cd $WORKDIR; $PIP_OR_PYTHON_PATH/python MaxText/train.py MaxText/configs/$CONFIG_FILE run_name=$RUN_NAME hardware=tpu dataset_path=$DATASET_PATH| tee train.log"
+
+
+
+
+# 上传数据到huggingface过程
+pip install huggingface_hub
+git lfs install  or sudo apt install git-lfs
+huggingface-cli login
+git clone https://huggingface.co/datasets/Caiyun-AI/Pile_tfrecord
+cd Pile_tfrecord
+# 设置大文件传输和http传输上限
+huggingface-cli lfs-enable-largefiles .
+git config http.postBuffer 15728640000
+# 将大文件的后缀或者格式加入到.gitattribute里面
+git lfs track pile*
+
+git add FILE_NAME
+# 这一步可能会让你设置用户名和邮箱之类的，按照提示做就行了
+git commit -m '提交信息'
+git push
+
+# 输入用户名密码之后 1小时内不用输入
+git config --global credential.helper 'cache --timeout=3600'
+
+Name: Caiyun-AI
+Email: caiyunai2024@163.com
+token: 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
